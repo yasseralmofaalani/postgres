@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>المحاضرة 01: مقدمة في PostgreSQL - دورة PostgreSQL و PostGIS</title>
+    <link rel="stylesheet" href="../../styles/main.css">
+</head>
+<body>
+    <header class="main-header">
+        <div class="container">
+            <h1>دورة PostgreSQL و PostGIS الشاملة</h1>
+            <p class="instructor">مقدم الدورة: <strong>م. ياسر المفعلاني</strong></p>
+        </div>
+    </header>
+
+    <main class="lecture-content">
+        <div class="lecture-header">
+            <h1>المحاضرة 01: مقدمة في PostgreSQL</h1>
+            <div class="lecture-meta">
+                <span>المستوى: المبتدئ</span>
+                <span>المدة: 45 دقيقة</span>
+            </div>
+        </div>
+
+        <div class="lecture-body">
+            <a href="../../index.html" class="back-to-index">← العودة إلى الفهرس</a>
+
+            <h2>ما هو PostgreSQL؟</h2>
+            <p>
+                PostgreSQL هو نظام إدارة قواعد بيانات علائقية (RDBMS) مفتوح المصدر وقوي. 
+                تم تطويره لأول مرة في عام 1986 في جامعة كاليفورنيا، بيركلي، وهو الآن أحد 
+                أكثر أنظمة قواعد البيانات تقدمًا وموثوقية في العالم.
+            </p>
+
+            <div class="alert alert-info">
+                <strong>معلومة:</strong> PostgreSQL يدعم معيار SQL بشكل كامل وهو متوافق مع 
+                جميع المعايير الدولية لقواعد البيانات.
+            </div>
+
+            <h2>مميزات PostgreSQL</h2>
+            <ul>
+                <li><strong>مفتوح المصدر:</strong> مجاني تمامًا ويمكن تخصيصه حسب الحاجة</li>
+                <li><strong>موثوقية عالية:</strong> معروف بثباته وقدرته على التعامل مع البيانات الكبيرة</li>
+                <li><strong>الأمان:</strong> يوفر مستويات متقدمة من الأمان والصلاحيات</li>
+                <li><strong>قابلية التوسع:</strong> يدعم قواعد البيانات الكبيرة جدًا</li>
+                <li><strong>دعم أنواع البيانات المتقدمة:</strong> JSON, XML, Arrays, وغيرها</li>
+                <li><strong>الأداء العالي:</strong> محسّن للاستعلامات المعقدة</li>
+            </ul>
+
+            <h2>PostgreSQL مقابل أنظمة قواعد البيانات الأخرى</h2>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>الميزة</th>
+                            <th>PostgreSQL</th>
+                            <th>MySQL</th>
+                            <th>Oracle</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>التكلفة</td>
+                            <td>مجاني</td>
+                            <td>مجاني</td>
+                            <td>مدفوع</td>
+                        </tr>
+                        <tr>
+                            <td>دعم البيانات الجغرافية</td>
+                            <td>ممتاز (PostGIS)</td>
+                            <td>محدود</td>
+                            <td>جيد</td>
+                        </tr>
+                        <tr>
+                            <td>الأداء</td>
+                            <td>ممتاز</td>
+                            <td>جيد</td>
+                            <td>ممتاز</td>
+                        </tr>
+                        <tr>
+                            <td>قابلية التوسع</td>
+                            <td>ممتازة</td>
+                            <td>جيدة</td>
+                            <td>ممتازة</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h2>ما هو PostGIS؟</h2>
+            <p>
+                PostGIS هو امتداد مكاني لـ PostgreSQL يضيف دعمًا لأنواع البيانات الجغرافية 
+                والوظائف المكانية. يتيح PostGIS تخزين واستعلام البيانات الجغرافية مثل النقاط، 
+                الخطوط، والمضلعات.
+            </p>
+
+            <div class="definition-list">
+                <dt>البيانات الجغرافية (Spatial Data):</dt>
+                <dd>هي البيانات التي تحتوي على معلومات عن المواقع الجغرافية والأشكال المكانية</dd>
+                
+                <dt>نظام المعلومات الجغرافية (GIS):</dt>
+                <dd>نظام لجمع وإدارة وتحليل البيانات الجغرافية</dd>
+            </div>
+
+            <h2>استخدامات PostgreSQL و PostGIS</h2>
+            <ul>
+                <li><strong>أنظمة المعلومات الجغرافية (GIS):</strong> إدارة البيانات المكانية</li>
+                <li><strong>الخرائط التفاعلية:</strong> تطبيقات الخرائط والملاحة</li>
+                <li><strong>التحليل المكاني:</strong> تحليل البيانات الجغرافية للاستثمارات والتخطيط</li>
+                <li><strong>إدارة البنية التحتية:</strong> تتبع الشبكات والمرافق</li>
+                <li><strong>البيئة والمناخ:</strong> تحليل البيانات البيئية</li>
+                <li><strong>التجارة الإلكترونية:</strong> تحديد مواقع التوصيل والخدمات</li>
+            </ul>
+
+            <h2>مكونات PostgreSQL</h2>
+            <ol>
+                <li><strong>PostgreSQL Server:</strong> الخادم الرئيسي لقاعدة البيانات</li>
+                <li><strong>psql:</strong> أداة سطر الأوامر للتفاعل مع قاعدة البيانات</li>
+                <li><strong>pgAdmin:</strong> واجهة رسومية لإدارة قاعدة البيانات</li>
+                <li><strong>PostGIS Extension:</strong> امتداد البيانات الجغرافية</li>
+            </ol>
+
+            <h2>مثال بسيط: استعلام SQL</h2>
+            <p>دعنا نرى مثالًا بسيطًا على استعلام SQL:</p>
+            <div class="code-block">
+                <div class="code-title">مثال: استعلام بسيط</div>
+                <pre><code>-- إنشاء جدول بسيط
+CREATE TABLE cities (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    population INTEGER
+);
+
+-- إدراج بيانات
+INSERT INTO cities (name, population) 
+VALUES ('الرياض', 7700000),
+       ('جدة', 4700000),
+       ('الدمام', 1200000);
+
+-- استعلام البيانات
+SELECT * FROM cities WHERE population > 2000000;</code></pre>
+            </div>
+
+            <div class="alert alert-success">
+                <strong>ملاحظة:</strong> في المحاضرات القادمة سنتعلم كيفية إنشاء الجداول 
+                وإدارة البيانات بشكل تفصيلي.
+            </div>
+
+            <h2>الخلاصة</h2>
+            <p>
+                في هذه المحاضرة تعرفنا على:
+            </p>
+            <ul>
+                <li>ما هو PostgreSQL ومميزاته</li>
+                <li>ما هو PostGIS واستخداماته</li>
+                <li>مقارنة PostgreSQL مع أنظمة قواعد البيانات الأخرى</li>
+                <li>مكونات PostgreSQL الأساسية</li>
+            </ul>
+
+            <p>
+                في المحاضرة القادمة سنتعلم كيفية تثبيت وإعداد PostgreSQL على أنظمة التشغيل المختلفة.
+            </p>
+        </div>
+
+        <div class="navigation">
+            <a href="../../index.html" class="nav-link prev">العودة إلى الفهرس</a>
+            <a href="02-installation.html" class="nav-link next">المحاضرة التالية: تثبيت وإعداد PostgreSQL →</a>
+        </div>
+    </main>
+
+    <footer class="main-footer">
+        <div class="container">
+            <p>&copy; 2024 دورة PostgreSQL و PostGIS - م. ياسر المفعلاني</p>
+        </div>
+    </footer>
+
+    <script src="../../scripts/main.js"></script>
+</body>
+</html>
+
