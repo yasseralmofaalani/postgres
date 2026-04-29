@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>المحاضرة 05: إدارة قواعد البيانات - دورة PostgreSQL و PostGIS</title>
+    <link rel="stylesheet" href="../../styles/main.css">
+</head>
+<body>
+    <header class="main-header">
+        <div class="container">
+            <h1>دورة PostgreSQL و PostGIS الشاملة</h1>
+            <p class="instructor">مقدم الدورة: <strong>م. ياسر المفعلاني</strong></p>
+        </div>
+    </header>
+
+    <main class="lecture-content">
+        <div class="lecture-header">
+            <h1>المحاضرة 05: إدارة قواعد البيانات</h1>
+            <div class="lecture-meta">
+                <span>المستوى: الخبير</span>
+                <span>المدة: 120 دقيقة</span>
+            </div>
+        </div>
+
+        <div class="lecture-body">
+            <a href="../../index.html" class="back-to-index">← العودة إلى الفهرس</a>
+
+            <h2>مقدمة</h2>
+            <p>
+                إدارة قواعد البيانات PostgreSQL تتطلب فهمًا عميقًا للعمليات الداخلية، 
+                المراقبة، التحسين، والصيانة. في هذه المحاضرة سنتعلم المهارات المتقدمة 
+                لإدارة قواعد البيانات الجغرافية بكفاءة.
+            </p>
+
+            <h2>إدارة قواعد البيانات</h2>
+            <h3>إنشاء وإدارة قواعد البيانات</h3>
+            <div class="code-block">
+                <div class="code-title">عمليات قواعد البيانات</div>
+                <pre><code>-- إنشاء قاعدة بيانات
+CREATE DATABASE gis_db
+    WITH 
+    OWNER = postgres
+    ENCODING = 'UTF8'
+    LC_COLLATE = 'ar_SA.UTF-8'
+    LC_CTYPE = 'ar_SA.UTF-8'
+    TEMPLATE = template0;
+
+-- عرض جميع قواعد البيانات
+SELECT 
+    datname,
+    pg_size_pretty(pg_database_size(datname)) AS size,
+    pg_database.datcollate AS collation
+FROM pg_database
+WHERE datistemplate = false
+ORDER BY pg_database_size(datname) DESC;
+
+-- عرض حجم قاعدة بيانات
+SELECT pg_size_pretty(pg_database_size('gis_db')) AS database_size;
+
+-- عرض معلومات قاعدة بيانات
+SELECT 
+    datname,
+    datdba,
+    encoding,
+    datcollate,
+    datctype
+FROM pg_database
+WHERE datname = 'gis_db';
+
+-- تغيير مالك قاعدة البيانات
+ALTER DATABASE gis_db OWNER TO new_owner;
+
+-- إعادة تسمية قاعدة بيانات
+ALTER DATABASE old_name RENAME TO new_name;
+
+-- حذف قاعدة بيانات
+DROP DATABASE IF EXISTS gis_db;</code></pre>
+            </div>
+
+            <h2>إدارة الجداول</h2>
+            <h3>معلومات الجداول</h3>
+            <div class="code-block">
+                <div class="code-title">استعلام معلومات الجداول</div>
+                <pre><code>-- عرض جميع الجداول
+SELECT 
+    schemaname,
+    tablename,
+    pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS total_size,
+    pg_size_pretty(pg_relation_size(schemaname||'.'||tablename)) AS table_size,
+    pg_size_pretty(pg_indexes_size(schemaname||'.'||tablename)) AS indexes_size
+FROM pg_tables
+WHERE schemaname = 'public'
+ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;
+
+-- عدد الصفوف في كل جدول
+SELECT 
+    schemaname,
+    tablename,
+    n_live_tup AS row_count
+FROM pg_stat_user_tables
+ORDER BY n_live_tup DESC;
+
+-- معلومات تفصيلية عن جدول
+SELECT 
+    column_name,
+    data_type,
+    character_maximum_length,
+    is_nullable,
+    column_default
+FROM information_schema.columns
+WHERE table_schema = 'public'
+  AND table_name = 'cities'
+ORDER BY ordinal_position;</code></pre>
+            </div>
+
+            <h3>صيانة الجداول</h3>
+            <div class="code-block">
+                <div class="code-title">صيانة الجداول</div>
+                <pre><code>-- VACUUM: تنظيف وإعادة تنظيم
+VACUUM ANALYZE cities;
+
+-- VACUUM كامل
+VACUUM FULL cities;
+
+-- VACUUM لجميع الجداول
+VACUUM ANALYZE;
+
+-- إعادة بناء الفهارس
+REINDEX TABLE cities;
+
+-- إعادة بناء جميع الفهارس
+REINDEX DATABASE gis_db;
+
+-- تحديث الإحصائيات
+ANALYZE cities;
+
+-- تحديث إحصائيات جميع الجداول
+ANALYZE;</code></pre>
+            </div>
+
+            <h2>المراقبة والأداء</h2>
+            <h3>مراقبة الجلسات</h3>
+            <div class="code-block">
+                <div class="code-title">مراقبة الجلسات النشطة</div>
+                <pre><code>-- عرض جميع الجلسات
+SELECT 
+    pid,
+    usename,
+    application_name,
+    client_addr,
+    state,
+    query_start,
+    state_change,
+    wait_event_type,
+    wait_event,
+    query
+FROM pg_stat_activity
+WHERE datname = 'gis_db'
+  AND state != 'idle'
+ORDER BY query_start;
+
+-- إنهاء جلسة
+SELECT pg_terminate_backend(pid)
+FROM pg_stat_activity
+WHERE pid = 12345;
+
+-- إلغاء استعلام
+SELECT pg_cancel_backend(pid)
+FROM pg_stat_activity
+WHERE pid = 12345;</code></pre>
+            </div>
+
+            <h3>إحصائيات الأداء</h3>
+            <div class="code-block">
+                <div class="code-title">إحصائيات الأداء</div>
+                <pre><code>-- إحصائيات الجداول
+SELECT 
+    schemaname,
+    tablename,
+    seq_scan AS sequential_scans,
+    seq_tup_read AS seq_tuples_read,
+    idx_scan AS index_scans,
+    idx_tup_fetch AS index_tuples_fetched,
+    n_tup_ins AS inserts,
+    n_tup_upd AS updates,
+    n_tup_del AS deletes,
+    n_live_tup AS live_tuples,
+    n_dead_tup AS dead_tuples,
+    last_vacuum,
+    last_autovacuum,
+    last_analyze,
+    last_autoanalyze
+FROM pg_stat_user_tables
+ORDER BY seq_scan DESC;
+
+-- إحصائيات الفهارس
+SELECT 
+    schemaname,
+    tablename,
+    indexname,
+    idx_scan AS index_scans,
+    idx_tup_read AS tuples_read,
+    idx_tup_fetch AS tuples_fetched
+FROM pg_stat_user_indexes
+ORDER BY idx_scan DESC;
+
+-- الاستعلامات البطيئة
+SELECT 
+    query,
+    calls,
+    total_time,
+    mean_time,
+    max_time,
+    rows
+FROM pg_stat_statements
+ORDER BY mean_time DESC
+LIMIT 10;</code></pre>
+            </div>
+
+            <h2>إدارة الذاكرة والموارد</h2>
+            <h3>إعدادات الذاكرة</h3>
+            <div class="code-block">
+                <div class="code-title">تكوين الذاكرة</div>
+                <pre><code>-- عرض إعدادات الذاكرة
+SHOW shared_buffers;
+SHOW effective_cache_size;
+SHOW work_mem;
+SHOW maintenance_work_mem;
+
+-- تعديل الإعدادات (في postgresql.conf)
+-- shared_buffers = 256MB          # 25% من RAM
+-- effective_cache_size = 1GB      # 50-75% من RAM
+-- work_mem = 16MB                 # لكل عملية
+-- maintenance_work_mem = 128MB    # للصيانة
+
+-- إعادة تحميل التكوين
+SELECT pg_reload_conf();</code></pre>
+            </div>
+
+            <h3>إدارة الاتصالات</h3>
+            <div class="code-block">
+                <div class="code-title">إدارة الاتصالات</div>
+                <pre><code>-- عرض عدد الاتصالات
+SELECT 
+    count(*) AS total_connections,
+    count(*) FILTER (WHERE state = 'active') AS active_connections,
+    count(*) FILTER (WHERE state = 'idle') AS idle_connections
+FROM pg_stat_activity
+WHERE datname = 'gis_db';
+
+-- الحد الأقصى للاتصالات
+SHOW max_connections;
+
+-- استخدام الاتصالات
+SELECT 
+    count(*) AS current_connections,
+    (SELECT setting::int FROM pg_settings WHERE name = 'max_connections') AS max_connections,
+    round(100.0 * count(*) / 
+        (SELECT setting::int FROM pg_settings WHERE name = 'max_connections'), 2) AS usage_percent
+FROM pg_stat_activity;</code></pre>
+            </div>
+
+            <h2>إدارة المستخدمين والصلاحيات</h2>
+            <h3>إنشاء وإدارة المستخدمين</h3>
+            <div class="code-block">
+                <div class="code-title">إدارة المستخدمين</div>
+                <pre><code>-- إنشاء مستخدم
+CREATE USER gis_user WITH PASSWORD 'secure_password';
+
+-- إنشاء مستخدم مع خيارات
+CREATE USER gis_admin WITH 
+    PASSWORD 'admin_password'
+    CREATEDB
+    CREATEROLE
+    LOGIN;
+
+-- عرض جميع المستخدمين
+SELECT 
+    usename,
+    usecreatedb,
+    usesuper,
+    usecanlogin
+FROM pg_user
+ORDER BY usename;
+
+-- تغيير كلمة المرور
+ALTER USER gis_user WITH PASSWORD 'new_password';
+
+-- إعادة تسمية مستخدم
+ALTER USER old_name RENAME TO new_name;
+
+-- حذف مستخدم
+DROP USER IF EXISTS gis_user;</code></pre>
+            </div>
+
+            <h3>إدارة الصلاحيات</h3>
+            <div class="code-block">
+                <div class="code-title">الصلاحيات</div>
+                <pre><code>-- منح صلاحيات
+GRANT SELECT, INSERT, UPDATE ON cities TO gis_user;
+GRANT ALL PRIVILEGES ON DATABASE gis_db TO gis_admin;
+
+-- منح صلاحيات على schema
+GRANT USAGE ON SCHEMA public TO gis_user;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO gis_user;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO gis_user;
+
+-- إزالة الصلاحيات
+REVOKE INSERT ON cities FROM gis_user;
+
+-- عرض الصلاحيات
+SELECT 
+    grantee,
+    table_schema,
+    table_name,
+    privilege_type
+FROM information_schema.role_table_grants
+WHERE table_name = 'cities';</code></pre>
+            </div>
+
+            <h2>التحسين والصيانة</h2>
+            <h3>تحليل الاستعلامات</h3>
+            <div class="code-block">
+                <div class="code-title">تحليل الأداء</div>
+                <pre><code>-- EXPLAIN: خطة التنفيذ
+EXPLAIN SELECT * FROM cities WHERE population > 1000000;
+
+-- EXPLAIN ANALYZE: تنفيذ فعلي
+EXPLAIN ANALYZE 
+SELECT c.name, r.name 
+FROM cities c 
+JOIN regions r ON ST_Within(c.location, r.boundary);
+
+-- EXPLAIN مع تفاصيل
+EXPLAIN (ANALYZE, BUFFERS, VERBOSE, FORMAT JSON)
+SELECT * FROM cities WHERE ST_Within(location, 
+    (SELECT boundary FROM regions WHERE name = 'منطقة الرياض'));</code></pre>
+            </div>
+
+            <h3>صيانة دورية</h3>
+            <div class="code-block">
+                <div class="code-title">مهام الصيانة</div>
+                <pre><code>-- سكريبت صيانة شامل
+DO $$
+DECLARE
+    r RECORD;
+BEGIN
+    -- VACUUM لجميع الجداول
+    FOR r IN SELECT tablename FROM pg_tables WHERE schemaname = 'public'
+    LOOP
+        EXECUTE 'VACUUM ANALYZE ' || quote_ident(r.tablename);
+    END LOOP;
+    
+    -- إعادة بناء الفهارس
+    FOR r IN SELECT indexname FROM pg_indexes WHERE schemaname = 'public'
+    LOOP
+        EXECUTE 'REINDEX INDEX ' || quote_ident(r.indexname);
+    END LOOP;
+END $$;
+
+-- تحديث الإحصائيات
+ANALYZE;</code></pre>
+            </div>
+
+            <h2>الخلاصة</h2>
+            <p>في هذه المحاضرة تعلمنا:</p>
+            <ul>
+                <li>إنشاء وإدارة قواعد البيانات</li>
+                <li>إدارة الجداول والفهارس</li>
+                <li>صيانة الجداول (VACUUM, REINDEX)</li>
+                <li>مراقبة الجلسات والأداء</li>
+                <li>إدارة الذاكرة والموارد</li>
+                <li>إدارة المستخدمين والصلاحيات</li>
+                <li>تحليل وتحسين الاستعلامات</li>
+                <li>مهام الصيانة الدورية</li>
+            </ul>
+
+            <p>في المحاضرة القادمة سنتعلم النسخ الاحتياطي والاستعادة.</p>
+        </div>
+
+        <div class="navigation">
+            <a href="04-3d-geometry.html" class="nav-link prev">← المحاضرة السابقة</a>
+            <a href="06-backup-recovery.html" class="nav-link next">المحاضرة التالية →</a>
+        </div>
+    </main>
+
+    <footer class="main-footer">
+        <div class="container">
+            <p>&copy; 2024 دورة PostgreSQL و PostGIS - م. ياسر المفعلاني</p>
+        </div>
+    </footer>
+
+    <script src="../../scripts/main.js"></script>
+</body>
+</html>
+

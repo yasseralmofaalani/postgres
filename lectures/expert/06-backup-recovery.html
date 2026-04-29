@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>المحاضرة 06: النسخ الاحتياطي والاستعادة - دورة PostgreSQL و PostGIS</title>
+    <link rel="stylesheet" href="../../styles/main.css">
+</head>
+<body>
+    <header class="main-header">
+        <div class="container">
+            <h1>دورة PostgreSQL و PostGIS الشاملة</h1>
+            <p class="instructor">مقدم الدورة: <strong>م. ياسر المفعلاني</strong></p>
+        </div>
+    </header>
+
+    <main class="lecture-content">
+        <div class="lecture-header">
+            <h1>المحاضرة 06: النسخ الاحتياطي والاستعادة</h1>
+            <div class="lecture-meta">
+                <span>المستوى: الخبير</span>
+                <span>المدة: 90 دقيقة</span>
+            </div>
+        </div>
+
+        <div class="lecture-body">
+            <a href="../../index.html" class="back-to-index">← العودة إلى الفهرس</a>
+
+            <h2>مقدمة</h2>
+            <p>
+                النسخ الاحتياطي والاستعادة من أهم عمليات إدارة قواعد البيانات. في هذه المحاضرة 
+                سنتعلم أنواع النسخ الاحتياطي المختلفة، كيفية تنفيذها، واستراتيجيات الاستعادة 
+                للبيانات الجغرافية.
+            </p>
+
+            <h2>أنواع النسخ الاحتياطي</h2>
+            <h3>1. النسخ الاحتياطي الكامل (Full Backup)</h3>
+            <div class="code-block">
+                <div class="code-title">نسخ احتياطي كامل</div>
+                <pre><code># نسخ احتياطي SQL نصي
+pg_dump -U postgres -d gis_db > backup_full.sql
+
+# نسخ احتياطي مضغوط
+pg_dump -U postgres -d gis_db -F c -f backup_full.dump
+
+# نسخ احتياطي مع خيارات
+pg_dump -U postgres \
+    -d gis_db \
+    -F c \
+    -f backup_$(date +%Y%m%d_%H%M%S).dump \
+    -v \
+    --clean \
+    --if-exists
+
+# الخيارات:
+# -F c: تنسيق مخصص (مضغوط)
+# -F p: تنسيق نصي (SQL)
+# -F t: تنسيق tar
+# -v: تفصيلي
+# --clean: إضافة أوامر DROP
+# --if-exists: استخدام IF EXISTS مع DROP
+# --schema: نسخ schema محدد فقط
+# --table: نسخ جدول محدد</code></pre>
+            </div>
+
+            <h3>2. النسخ الاحتياطي التفاضلي (Differential Backup)</h3>
+            <div class="code-block">
+                <div class="code-title">نسخ احتياطي تفاضلي</div>
+                <pre><code># نسخ احتياطي للجداول المحددة فقط
+pg_dump -U postgres -d gis_db \
+    -t cities \
+    -t roads \
+    -F c \
+    -f backup_tables.dump
+
+# نسخ احتياطي لـ schema محدد
+pg_dump -U postgres -d gis_db \
+    --schema=public \
+    -F c \
+    -f backup_schema.dump</code></pre>
+            </div>
+
+            <h3>3. النسخ الاحتياطي المستمر (Continuous Archiving)</h3>
+            <div class="code-block">
+                <div class="code-title">إعداد WAL Archiving</div>
+                <pre><code># في postgresql.conf:
+wal_level = replica
+archive_mode = on
+archive_command = 'cp %p /backup/wal_archive/%f'
+
+# إنشاء نسخة احتياطي أساسية
+pg_basebackup -D /backup/base_backup \
+    -Ft \
+    -z \
+    -P \
+    -U postgres
+
+# الخيارات:
+# -D: مجلد الوجهة
+# -Ft: تنسيق tar
+# -z: ضغط
+# -P: عرض التقدم</code></pre>
+            </div>
+
+            <h2>النسخ الاحتياطي المتقدم</h2>
+            <h3>نسخ احتياطي مع استبعاد</h3>
+            <div class="code-block">
+                <div class="code-title">استبعاد جداول محددة</div>
+                <pre><code># نسخ احتياطي مع استبعاد جداول كبيرة
+pg_dump -U postgres -d gis_db \
+    --exclude-table=large_table \
+    --exclude-table-data=temp_table \
+    -F c \
+    -f backup_excluded.dump
+
+# نسخ احتياطي للهيكل فقط (بدون بيانات)
+pg_dump -U postgres -d gis_db \
+    --schema-only \
+    -F c \
+    -f backup_schema_only.dump
+
+# نسخ احتياطي للبيانات فقط (بدون هيكل)
+pg_dump -U postgres -d gis_db \
+    --data-only \
+    -F c \
+    -f backup_data_only.dump</code></pre>
+            </div>
+
+            <h3>نسخ احتياطي متوازي</h3>
+            <div class="code-block">
+                <div class="code-title">نسخ احتياطي سريع</div>
+                <pre><code># نسخ احتياطي متوازي (للقواعد الكبيرة)
+pg_dump -U postgres -d gis_db \
+    -F d \
+    -j 4 \
+    -f backup_directory
+
+# الخيارات:
+# -F d: تنسيق directory
+# -j: عدد الوظائف المتوازية</code></pre>
+            </div>
+
+            <h2>الاستعادة</h2>
+            <h3>الاستعادة من ملف SQL</h3>
+            <div class="code-block">
+                <div class="code-title">استعادة نصية</div>
+                <pre><code># استعادة كاملة
+psql -U postgres -d gis_db < backup_full.sql
+
+# استعادة مع خيارات
+psql -U postgres \
+    -d gis_db \
+    -f backup_full.sql \
+    -v ON_ERROR_STOP=1 \
+    -a
+
+# الخيارات:
+# -f: ملف SQL
+# -v: متغيرات
+# -a: عرض جميع الأوامر
+# -e: عرض الأوامر المرسلة</code></pre>
+            </div>
+
+            <h3>الاستعادة من ملف مضغوط</h3>
+            <div class="code-block">
+                <div class="code-title">استعادة باستخدام pg_restore</div>
+                <pre><code># استعادة كاملة
+pg_restore -U postgres -d gis_db backup_full.dump
+
+# استعادة مع خيارات
+pg_restore -U postgres \
+    -d gis_db \
+    -v \
+    --clean \
+    --if-exists \
+    backup_full.dump
+
+# استعادة جدول محدد
+pg_restore -U postgres \
+    -d gis_db \
+    -t cities \
+    backup_full.dump
+
+# استعادة schema محدد
+pg_restore -U postgres \
+    -d gis_db \
+    --schema=public \
+    backup_full.dump
+
+# استعادة الهيكل فقط
+pg_restore -U postgres \
+    -d gis_db \
+    --schema-only \
+    backup_full.dump
+
+# استعادة البيانات فقط
+pg_restore -U postgres \
+    -d gis_db \
+    --data-only \
+    backup_full.dump</code></pre>
+            </div>
+
+            <h2>الاستعادة من نقطة زمنية (Point-in-Time Recovery)</h2>
+            <div class="code-block">
+                <div class="code-title">PITR</div>
+                <pre><code># 1. إعداد postgresql.conf
+wal_level = replica
+archive_mode = on
+archive_command = 'cp %p /backup/wal_archive/%f'
+
+# 2. إنشاء نسخة احتياطي أساسية
+pg_basebackup -D /backup/base -Ft -z
+
+# 3. إنشاء ملف recovery.conf
+# restore_command = 'cp /backup/wal_archive/%f %p'
+# recovery_target_time = '2024-01-15 14:30:00'
+
+# 4. استعادة
+# نسخ ملفات النسخة الاحتياطية
+# نسخ ملفات WAL
+# إنشاء recovery.conf
+# بدء PostgreSQL</code></pre>
+            </div>
+
+            <h2>استراتيجيات النسخ الاحتياطي</h2>
+            <h3>النسخ الاحتياطي اليومي</h3>
+            <div class="code-block">
+                <div class="code-title">سكريبت نسخ احتياطي يومي</div>
+                <pre><code>#!/bin/bash
+# backup_daily.sh
+
+BACKUP_DIR="/backup/postgresql"
+DATE=$(date +%Y%m%d_%H%M%S)
+DB_NAME="gis_db"
+RETENTION_DAYS=7
+
+# إنشاء النسخة الاحتياطية
+pg_dump -U postgres \
+    -d $DB_NAME \
+    -F c \
+    -f $BACKUP_DIR/backup_$DATE.dump \
+    -v
+
+# ضغط النسخة الاحتياطية
+gzip $BACKUP_DIR/backup_$DATE.dump
+
+# حذف النسخ القديمة
+find $BACKUP_DIR -name "backup_*.dump.gz" -mtime +$RETENTION_DAYS -delete
+
+# إرسال إشعار
+echo "Backup completed: backup_$DATE.dump.gz" | mail -s "PostgreSQL Backup" admin@example.com</code></pre>
+            </div>
+
+            <h3>النسخ الاحتياطي التلقائي</h3>
+            <div class="code-block">
+                <div class="code-title">إعداد cron job</div>
+                <pre><code># إضافة إلى crontab
+# crontab -e
+
+# نسخ احتياطي يومي في الساعة 2 صباحاً
+0 2 * * * /path/to/backup_daily.sh
+
+# نسخ احتياطي أسبوعي
+0 3 * * 0 /path/to/backup_weekly.sh
+
+# نسخ احتياطي شهري
+0 4 1 * * /path/to/backup_monthly.sh</code></pre>
+            </div>
+
+            <h2>التحقق من النسخ الاحتياطي</h2>
+            <div class="code-block">
+                <div class="code-title">التحقق من صحة النسخة</div>
+                <pre><code># عرض محتويات النسخة الاحتياطية
+pg_restore -l backup_full.dump
+
+# التحقق من التكامل
+pg_restore --list backup_full.dump | grep -c "TABLE DATA"
+
+# اختبار الاستعادة في قاعدة بيانات تجريبية
+createdb test_restore
+pg_restore -d test_restore backup_full.dump
+# التحقق من البيانات
+psql -d test_restore -c "SELECT COUNT(*) FROM cities;"
+dropdb test_restore</code></pre>
+            </div>
+
+            <h2>النسخ الاحتياطي للبيانات الجغرافية</h2>
+            <div class="code-block">
+                <div class="code-title">اعتبارات خاصة للبيانات الجغرافية</div>
+                <pre><code># نسخ احتياطي مع PostGIS
+pg_dump -U postgres -d gis_db \
+    --extension=postgis \
+    --extension=postgis_topology \
+    -F c \
+    -f backup_with_postgis.dump
+
+# نسخ احتياطي للبيانات النقطية
+pg_dump -U postgres -d gis_db \
+    -t elevation \
+    -F c \
+    -f backup_raster.dump
+
+# التحقق من PostGIS بعد الاستعادة
+psql -d restored_db -c "SELECT PostGIS_Version();"</code></pre>
+            </div>
+
+            <h2>الخلاصة</h2>
+            <p>في هذه المحاضرة تعلمنا:</p>
+            <ul>
+                <li>أنواع النسخ الاحتياطي (كامل، تفاضلي، مستمر)</li>
+                <li>استخدام pg_dump و pg_restore</li>
+                <li>النسخ الاحتياطي المتقدم (متوازي، مع استبعاد)</li>
+                <li>الاستعادة من نقطة زمنية (PITR)</li>
+                <li>استراتيجيات النسخ الاحتياطي التلقائي</li>
+                <li>التحقق من صحة النسخ الاحتياطي</li>
+                <li>اعتبارات خاصة للبيانات الجغرافية</li>
+            </ul>
+
+            <p>في المحاضرة القادمة سنتعلم الأمان وأفضل الممارسات.</p>
+        </div>
+
+        <div class="navigation">
+            <a href="05-database-administration.html" class="nav-link prev">← المحاضرة السابقة</a>
+            <a href="07-security-best-practices.html" class="nav-link next">المحاضرة التالية →</a>
+        </div>
+    </main>
+
+    <footer class="main-footer">
+        <div class="container">
+            <p>&copy; 2024 دورة PostgreSQL و PostGIS - م. ياسر المفعلاني</p>
+        </div>
+    </footer>
+
+    <script src="../../scripts/main.js"></script>
+</body>
+</html>
+

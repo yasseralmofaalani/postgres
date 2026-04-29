@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>المحاضرة 02: البيانات النقطية (Raster) - دورة PostgreSQL و PostGIS</title>
+    <link rel="stylesheet" href="../../styles/main.css">
+</head>
+<body>
+    <header class="main-header">
+        <div class="container">
+            <h1>دورة PostgreSQL و PostGIS الشاملة</h1>
+            <p class="instructor">مقدم الدورة: <strong>م. ياسر المفعلاني</strong></p>
+        </div>
+    </header>
+
+    <main class="lecture-content">
+        <div class="lecture-header">
+            <h1>المحاضرة 02: البيانات النقطية (Raster)</h1>
+            <div class="lecture-meta">
+                <span>المستوى: الخبير</span>
+                <span>المدة: 120 دقيقة</span>
+            </div>
+        </div>
+
+        <div class="lecture-body">
+            <a href="../../index.html" class="back-to-index">← العودة إلى الفهرس</a>
+
+            <h2>مقدمة في البيانات النقطية</h2>
+            <p>
+                البيانات النقطية (Raster) تمثل البيانات المستمرة في شكل مصفوفة من البكسلات. 
+                تستخدم في تمثيل الصور الجوية، الخرائط الطوبوغرافية، بيانات الارتفاع (DEM)، 
+                صور الأقمار الصناعية، وغيرها من البيانات المستمرة.
+            </p>
+
+            <div class="definition-list">
+                <dt>Raster:</dt>
+                <dd>مصفوفة من القيم الرقمية تمثل بيانات مستمرة في الفضاء</dd>
+                
+                <dt>Pixel (بكسل):</dt>
+                <dd>خلية واحدة في مصفوفة البيانات النقطية</dd>
+                
+                <dt>Band (نطاق):</dt>
+                <dd>قناة واحدة من البيانات (مثل الأحمر، الأخضر، الأزرق في الصور الملونة)</dd>
+            </div>
+
+            <h2>تثبيت PostGIS Raster</h2>
+            <div class="code-block">
+                <div class="code-title">تثبيت الامتداد</div>
+                <pre><code>-- تثبيت PostGIS Raster
+CREATE EXTENSION postgis_raster;
+
+-- التحقق من التثبيت
+SELECT PostGIS_Raster_Lib_Version();
+
+-- عرض معلومات كاملة
+SELECT PostGIS_Full_Version();</code></pre>
+            </div>
+
+            <h2>استيراد البيانات النقطية</h2>
+            <h3>استخدام raster2pgsql</h3>
+            <div class="code-block">
+                <div class="code-title">استيراد ملف Raster</div>
+                <pre><code># الصيغة الأساسية
+raster2pgsql [options] raster_file [schema.]table | psql [options]
+
+# مثال بسيط
+raster2pgsql -s 4326 -I -C -M elevation.tif public.elevation | \
+    psql -U postgres -d mydb
+
+# الخيارات الشائعة:
+# -s SRID: نظام الإحداثيات
+# -I: إنشاء فهرس مكاني
+# -C: إضافة قيود
+# -M: تحسين الذاكرة
+# -F: إضافة عمود اسم الملف
+# -t TILE_SIZE: حجم البلاط (مثل 256x256)
+# -R: تسجيل كملف خارجي
+# -l: إنشاء نظرة عامة (overview)
+
+# مثال مع خيارات متقدمة
+raster2pgsql -s 4326 -I -C -M -F -t 256x256 elevation.tif public.elevation | \
+    psql -U postgres -d mydb
+
+# استيراد عدة ملفات
+raster2pgsql -s 4326 -I -C -M -t 256x256 *.tif public.elevation_tiles | \
+    psql -U postgres -d mydb</code></pre>
+            </div>
+
+            <h3>إنشاء جدول Raster</h3>
+            <div class="code-block">
+                <div class="code-title">إنشاء جدول للبيانات النقطية</div>
+                <pre><code>-- إنشاء جدول بسيط
+CREATE TABLE elevation (
+    rid SERIAL PRIMARY KEY,
+    rast RASTER
+);
+
+-- إنشاء جدول مع معلومات إضافية
+CREATE TABLE elevation_data (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100),
+    source VARCHAR(200),
+    acquisition_date DATE,
+    rast RASTER,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- إضافة فهرس مكاني
+CREATE INDEX idx_elevation_rast ON elevation USING GIST(ST_ConvexHull(rast));</code></pre>
+            </div>
+
+            <h2>الاستعلامات على البيانات النقطية</h2>
+            <h3>ST_Value - استخراج قيمة</h3>
+            <div class="code-block">
+                <div class="code-title">استخراج قيمة من نقطة</div>
+                <pre><code>-- استخراج قيمة الارتفاع لنقطة معينة
+SELECT 
+    ST_Value(rast, ST_MakePoint(46.6753, 24.7136)) AS elevation
+FROM elevation
+WHERE ST_Intersects(rast, ST_MakePoint(46.6753, 24.7136));
+
+-- استخراج قيمة من عدة نقاط
+SELECT 
+    c.name,
+    c.location,
+    ST_Value(e.rast, c.location) AS elevation
+FROM cities c, elevation e
+WHERE ST_Intersects(e.rast, c.location)
+ORDER BY elevation DESC;</code></pre>
+            </div>
+
+            <h3>ST_SummaryStats - الإحصائيات</h3>
+            <div class="code-block">
+                <div class="code-title">إحصائيات Raster</div>
+                <pre><code>-- إحصائيات أساسية
+SELECT 
+    (ST_SummaryStats(rast)).* 
+FROM elevation;
+
+-- إحصائيات مع تفاصيل
+SELECT 
+    count AS pixel_count,
+    sum AS total_value,
+    mean AS average_value,
+    stddev AS standard_deviation,
+    min AS minimum_value,
+    max AS maximum_value
+FROM (
+    SELECT ST_SummaryStats(rast) AS stats FROM elevation
+) AS s,
+LATERAL (
+    SELECT 
+        (stats).count,
+        (stats).sum,
+        (stats).mean,
+        (stats).stddev,
+        (stats).min,
+        (stats).max
+) AS stats;
+
+-- إحصائيات لمنطقة معينة
+SELECT 
+    (ST_SummaryStats(
+        ST_Clip(rast, region_boundary)
+    )).*
+FROM elevation, regions
+WHERE regions.name = 'منطقة الرياض'
+  AND ST_Intersects(rast, region_boundary);</code></pre>
+            </div>
+
+            <h3>ST_Clip - قص Raster</h3>
+            <div class="code-block">
+                <div class="code-title">قص البيانات النقطية</div>
+                <pre><code>-- قص Raster بمنطقة معينة
+SELECT 
+    r.name AS region_name,
+    ST_Clip(e.rast, r.boundary) AS clipped_raster
+FROM elevation e, regions r
+WHERE ST_Intersects(e.rast, r.boundary);
+
+-- حفظ النتائج
+CREATE TABLE elevation_regions AS
+SELECT 
+    r.id,
+    r.name,
+    ST_Clip(e.rast, r.boundary) AS rast
+FROM elevation e, regions r
+WHERE ST_Intersects(e.rast, r.boundary);</code></pre>
+            </div>
+
+            <h3>ST_MapAlgebra - الجبر الخرائطي</h3>
+            <div class="code-block">
+                <div class="code-title">عمليات الجبر الخرائطي</div>
+                <pre><code>-- حساب المنحدر (Slope)
+CREATE TABLE slope AS
+SELECT 
+    ST_Slope(
+        rast,
+        1,  -- band number
+        '32BF',  -- pixel type
+        'DEGREES',  -- units
+        111120.0  -- scale
+    ) AS rast
+FROM elevation;
+
+-- حساب الاتجاه (Aspect)
+CREATE TABLE aspect AS
+SELECT 
+    ST_Aspect(
+        rast,
+        1,
+        '32BF',
+        'DEGREES',
+        111120.0
+    ) AS rast
+FROM elevation;
+
+-- عمليات حسابية
+CREATE TABLE elevation_normalized AS
+SELECT 
+    ST_MapAlgebra(
+        rast,
+        1,
+        '32BF',
+        '[rast] * 0.3048',  -- تحويل من قدم إلى متر
+        NULL
+    ) AS rast
+FROM elevation;</code></pre>
+            </div>
+
+            <h2>دمج البيانات النقطية والمتجهة</h2>
+            <div class="code-block">
+                <div class="code-title">دمج Raster و Vector</div>
+                <pre><code>-- استخراج قيم Raster للمدن
+SELECT 
+    c.name,
+    c.location,
+    ST_Value(e.rast, c.location) AS elevation_meters,
+    CASE 
+        WHEN ST_Value(e.rast, c.location) < 500 THEN 'منخفض'
+        WHEN ST_Value(e.rast, c.location) < 1000 THEN 'متوسط'
+        WHEN ST_Value(e.rast, c.location) < 2000 THEN 'مرتفع'
+        ELSE 'عالي جداً'
+    END AS elevation_category
+FROM cities c, elevation e
+WHERE ST_Intersects(e.rast, c.location);
+
+-- حساب متوسط الارتفاع لمنطقة
+SELECT 
+    r.name,
+    AVG(ST_Value(e.rast, ST_Centroid(r.boundary))) AS avg_elevation,
+    MIN(ST_Value(e.rast, ST_Centroid(r.boundary))) AS min_elevation,
+    MAX(ST_Value(e.rast, ST_Centroid(r.boundary))) AS max_elevation
+FROM regions r, elevation e
+WHERE ST_Intersects(e.rast, r.boundary)
+GROUP BY r.id, r.name;</code></pre>
+            </div>
+
+            <h2>معالجة البيانات النقطية المتقدمة</h2>
+            <h3>إعادة العينة (Resampling)</h3>
+            <div class="code-block">
+                <div class="code-title">إعادة العينة</div>
+                <pre><code>-- إعادة العينة إلى دقة مختلفة
+SELECT 
+    ST_Resample(
+        rast,
+        0.001,  -- دقة جديدة (بالدرجات)
+        'Bilinear'  -- طريقة إعادة العينة
+    ) AS resampled_rast
+FROM elevation;
+
+-- طرق إعادة العينة:
+-- NearestNeighbor: أقرب جار
+-- Bilinear: ثنائي الخطي
+-- Cubic: تكعيبي
+-- CubicSpline: مكعب سبلاين
+-- Lanczos: لانكزوس</code></pre>
+            </div>
+
+            <h3>دمج عدة Rasters</h3>
+            <div class="code-block">
+                <div class="code-title">دمج Rasters</div>
+                <pre><code>-- دمج عدة Rasters
+SELECT 
+    ST_Union(rast) AS merged_raster
+FROM elevation_tiles;
+
+-- دمج مع معالجة القيم المفقودة
+SELECT 
+    ST_Union(
+        ARRAY[rast1, rast2, rast3],
+        'LAST'  -- استخدام آخر قيمة غير NULL
+    ) AS merged_raster
+FROM elevation_tiles;</code></pre>
+            </div>
+
+            <h2>مثال شامل: نظام معلومات الارتفاع</h2>
+            <div class="code-block">
+                <div class="code-title">نظام شامل للارتفاع</div>
+                <pre><code>-- إنشاء قاعدة بيانات للارتفاع
+CREATE DATABASE elevation_db;
+\c elevation_db
+CREATE EXTENSION postgis;
+CREATE EXTENSION postgis_raster;
+
+-- استيراد بيانات الارتفاع
+-- raster2pgsql -s 4326 -I -C -M -t 256x256 dem.tif public.elevation | psql -U postgres -d elevation_db
+
+-- إنشاء جدول للتحليل
+CREATE TABLE elevation_analysis AS
+SELECT 
+    r.id,
+    r.name,
+    ST_Clip(e.rast, r.boundary) AS rast,
+    (ST_SummaryStats(ST_Clip(e.rast, r.boundary))).mean AS avg_elevation,
+    (ST_SummaryStats(ST_Clip(e.rast, r.boundary))).min AS min_elevation,
+    (ST_SummaryStats(ST_Clip(e.rast, r.boundary))).max AS max_elevation,
+    (ST_SummaryStats(ST_Clip(e.rast, r.boundary))).stddev AS elevation_stddev
+FROM regions r, elevation e
+WHERE ST_Intersects(e.rast, r.boundary);
+
+-- حساب المنحدر والاتجاه
+CREATE TABLE terrain_analysis AS
+SELECT 
+    id,
+    name,
+    ST_Slope(rast, 1, '32BF', 'DEGREES', 111120.0) AS slope,
+    ST_Aspect(rast, 1, '32BF', 'DEGREES', 111120.0) AS aspect
+FROM elevation_analysis;
+
+-- ربط الارتفاع بالمدن
+SELECT 
+    c.name,
+    c.population,
+    ST_Value(e.rast, c.location) AS elevation,
+    CASE 
+        WHEN ST_Value(e.rast, c.location) < 500 THEN 'سهل'
+        WHEN ST_Value(e.rast, c.location) < 1000 THEN 'هضبة'
+        ELSE 'جبل'
+    END AS terrain_type
+FROM cities c, elevation e
+WHERE ST_Intersects(e.rast, c.location)
+ORDER BY elevation DESC;</code></pre>
+            </div>
+
+            <h2>التحليل المتقدم للبيانات النقطية</h2>
+            <h3>تحليل التضاريس المتقدم</h3>
+            <div class="code-block">
+                <div class="code-title">حساب مؤشرات التضاريس</div>
+                <pre><code>-- حساب مؤشر التضاريس (TRI - Terrain Ruggedness Index)
+CREATE FUNCTION calculate_tri(
+    rast RASTER,
+    band_num INTEGER DEFAULT 1
+)
+RETURNS RASTER AS $$
+BEGIN
+    RETURN ST_MapAlgebra(
+        ARRAY[rast],
+        'tri_calc([rast.val])',
+        '32BF',
+        'FIRST',
+        NULL,
+        NULL,
+        NULL,
+        0,
+        0
+    );
+END;
+$$ LANGUAGE plpgsql;
+
+-- حساب مؤشر التضاريس
+CREATE TABLE terrain_ruggedness AS
+SELECT 
+    id,
+    ST_MapAlgebra(
+        ARRAY[rast],
+        'SQRT(POWER([rast.val] - [rast.val:neighborhood], 2))',
+        '32BF'
+    ) AS tri
+FROM elevation;
+
+-- حساب مؤشر التضاريس (TPI - Topographic Position Index)
+CREATE TABLE tpi AS
+SELECT 
+    id,
+    ST_MapAlgebra(
+        ARRAY[rast],
+        '[rast.val] - MEAN([rast.val:neighborhood])',
+        '32BF'
+    ) AS tpi
+FROM elevation;</code></pre>
+            </div>
+
+            <h3>تحليل المنحدرات المتقدم</h3>
+            <div class="code-block">
+                <div class="code-title">تحليل المنحدرات التفصيلي</div>
+                <pre><code>-- تصنيف المنحدرات
+CREATE TABLE slope_classification AS
+SELECT 
+    id,
+    rast,
+    CASE 
+        WHEN ST_Value(slope_rast, 1, ST_Centroid(ST_Envelope(rast))) < 5 THEN 'مسطح'
+        WHEN ST_Value(slope_rast, 1, ST_Centroid(ST_Envelope(rast))) < 15 THEN 'منحدر خفيف'
+        WHEN ST_Value(slope_rast, 1, ST_Centroid(ST_Envelope(rast))) < 30 THEN 'منحدر متوسط'
+        WHEN ST_Value(slope_rast, 1, ST_Centroid(ST_Envelope(rast))) < 45 THEN 'منحدر شديد'
+        ELSE 'منحدر جداً'
+    END AS slope_category
+FROM (
+    SELECT 
+        id,
+        rast,
+        ST_Slope(rast, 1, '32BF', 'DEGREES', 111120.0) AS slope_rast
+    FROM elevation
+) AS slope_data;
+
+-- حساب اتجاه المنحدر
+CREATE TABLE aspect_analysis AS
+SELECT 
+    id,
+    rast,
+    ST_Aspect(rast, 1, '32BF', 'DEGREES', 111120.0) AS aspect_rast,
+    CASE 
+        WHEN ST_Value(ST_Aspect(rast, 1, '32BF', 'DEGREES', 111120.0), 
+                     1, ST_Centroid(ST_Envelope(rast))) BETWEEN 0 AND 22.5 
+             OR ST_Value(ST_Aspect(rast, 1, '32BF', 'DEGREES', 111120.0), 
+                         1, ST_Centroid(ST_Envelope(rast))) BETWEEN 337.5 AND 360 
+        THEN 'شمال'
+        WHEN ST_Value(ST_Aspect(rast, 1, '32BF', 'DEGREES', 111120.0), 
+                      1, ST_Centroid(ST_Envelope(rast))) BETWEEN 22.5 AND 67.5 
+        THEN 'شمال شرق'
+        WHEN ST_Value(ST_Aspect(rast, 1, '32BF', 'DEGREES', 111120.0), 
+                      1, ST_Centroid(ST_Envelope(rast))) BETWEEN 67.5 AND 112.5 
+        THEN 'شرق'
+        -- يمكن إضافة باقي الاتجاهات
+        ELSE 'غير محدد'
+    END AS aspect_direction
+FROM elevation;</code></pre>
+            </div>
+
+            <h3>تحليل الوديان والقمم</h3>
+            <div class="code-block">
+                <div class="code-title">تحديد الوديان والقمم</div>
+                <pre><code>-- تحديد القمم (Peaks)
+CREATE TABLE peaks AS
+SELECT 
+    id,
+    ST_Value(rast, 1, point) AS elevation,
+    point
+FROM (
+    SELECT 
+        id,
+        rast,
+        (ST_PixelAsPoints(rast, 1)).geom AS point
+    FROM elevation
+) AS pixel_points
+WHERE ST_Value(rast, 1, point) > (
+    SELECT AVG(ST_Value(rast, 1, point)) * 1.5
+    FROM elevation, (ST_PixelAsPoints(rast, 1)).geom AS point
+);
+
+-- تحديد الوديان (Valleys)
+CREATE TABLE valleys AS
+SELECT 
+    id,
+    ST_Value(rast, 1, point) AS elevation,
+    point
+FROM (
+    SELECT 
+        id,
+        rast,
+        (ST_PixelAsPoints(rast, 1)).geom AS point
+    FROM elevation
+) AS pixel_points
+WHERE ST_Value(rast, 1, point) < (
+    SELECT AVG(ST_Value(rast, 1, point)) * 0.7
+    FROM elevation, (ST_PixelAsPoints(rast, 1)).geom AS point
+);</code></pre>
+            </div>
+
+            <h2>الربط مع برامج GIS للبيانات النقطية</h2>
+            <h3>1. الربط مع QGIS للبيانات النقطية</h3>
+            <div class="code-block">
+                <div class="code-title">عرض البيانات النقطية في QGIS</div>
+                <pre><code>-- في QGIS:
+-- 1. اذهب إلى: Layer > Add Layer > Add PostGIS Layers
+-- 2. اختر الاتصال مع قاعدة البيانات
+-- 3. اختر جدول Raster
+-- 4. اضغط Add
+
+-- إنشاء View محسّن للعرض في QGIS
+CREATE VIEW elevation_qgis AS
+SELECT 
+    rid,
+    rast,
+    ST_Envelope(rast) AS bbox
+FROM elevation;
+
+-- تصدير Raster من QGIS إلى PostGIS
+-- في QGIS:
+-- 1. قم بتحميل Raster
+-- 2. اذهب إلى: Database > DB Manager > PostGIS
+-- 3. اختر قاعدة البيانات
+-- 4. Import Layer/File
+-- 5. اختر Raster layer
+-- 6. حدد Schema و Table name
+-- 7. اضغط Import
+
+-- أو استخدام gdal_translate
+gdal_translate -of GTiff input.tif output.tif
+raster2pgsql -s 4326 -I -C -M output.tif public.elevation | \
+    psql -U postgres -d gis_db</code></pre>
+            </div>
+
+            <h3>2. الربط مع ArcGIS للبيانات النقطية</h3>
+            <div class="code-block">
+                <div class="code-title">استخدام Raster في ArcGIS</div>
+                <pre><code>-- في ArcGIS:
+-- 1. افتح ArcCatalog
+-- 2. اذهب إلى: Database Connections > Add Database Connection
+-- 3. اتصل بقاعدة البيانات
+-- 4. في ArcMap/ArcGIS Pro:
+--    - Add Data > Database
+--    - اختر جدول Raster
+--    - اضغط Add
+
+-- إنشاء Raster Dataset في PostGIS للعرض في ArcGIS
+CREATE TABLE elevation_arcgis (
+    rid SERIAL PRIMARY KEY,
+    rast RASTER,
+    name VARCHAR(100),
+    description TEXT
+);
+
+-- إضافة قيود للتوافق مع ArcGIS
+SELECT AddRasterConstraints(
+    'elevation_arcgis'::name,
+    'rast'::name
+);
+
+-- تصدير من ArcGIS إلى PostGIS
+-- في ArcGIS:
+-- 1. Geoprocessing > ArcToolbox
+-- 2. Conversion Tools > To Raster > Raster to Other Format
+-- 3. أو استخدام Python:
+--    arcpy.RasterToOtherFormat_conversion(
+--        "input_raster",
+--        "output_location",
+--        "GTIFF"
+--    )</code></pre>
+            </div>
+
+            <h3>3. نشر البيانات النقطية عبر GeoServer</h3>
+            <div class="code-block">
+                <div class="code-title">نشر Raster كخدمة WCS</div>
+                <pre><code>-- في GeoServer:
+-- 1. Stores > Add new store > PostGIS
+-- 2. أدخل معلومات الاتصال
+-- 3. اختر Coverage (للبيانات النقطية)
+-- 4. Publish Coverage
+-- 5. حدد:
+--    - Native SRS: EPSG:4326
+--    - Declared SRS: EPSG:4326
+--    - Bounding Boxes: Compute from data
+-- 6. اضغط Save
+
+-- إنشاء Coverage View محسّن
+CREATE VIEW elevation_coverage AS
+SELECT 
+    rid,
+    ST_Resample(rast, 0.001, 'Bilinear') AS rast  -- تبسيط للعرض
+FROM elevation
+WHERE ST_Intersects(rast, ST_MakeEnvelope(46.0, 24.0, 50.0, 27.0, 4326));
+
+-- استخدام WCS في التطبيقات
+-- مثال على طلب WCS:
+-- http://localhost:8080/geoserver/wcs?
+--     service=WCS&
+--     version=2.0.1&
+--     request=GetCoverage&
+--     coverageId=elevation&
+--     subset=Long(46.0,50.0)&
+--     subset=Lat(24.0,27.0)</code></pre>
+            </div>
+
+            <h3>4. استخدام البيانات النقطية في تطبيقات الويب</h3>
+            <div class="code-block">
+                <div class="code-title">إنشاء API للبيانات النقطية</div>
+                <pre><code>-- دالة لإرجاع بيانات Raster كـ PNG
+CREATE OR REPLACE FUNCTION get_raster_image(
+    bbox GEOMETRY,
+    width INTEGER DEFAULT 256,
+    height INTEGER DEFAULT 256
+)
+RETURNS BYTEA AS $$
+DECLARE
+    result BYTEA;
+BEGIN
+    SELECT ST_AsPNG(
+        ST_Resize(
+            ST_Clip(rast, bbox),
+            width,
+            height
+        )
+    )
+    INTO result
+    FROM elevation
+    WHERE ST_Intersects(rast, bbox)
+    LIMIT 1;
+    
+    RETURN result;
+END;
+$$ LANGUAGE plpgsql;
+
+-- استخدام في Node.js/Express
+-- app.get('/api/raster/:bbox', async (req, res) => {
+--     const bbox = req.params.bbox.split(',');
+--     const geom = `ST_MakeEnvelope(${bbox[0]}, ${bbox[1]}, ${bbox[2]}, ${bbox[3]}, 4326)`;
+--     const result = await db.query(`SELECT get_raster_image(${geom})`);
+--     res.set('Content-Type', 'image/png');
+--     res.send(result.rows[0].get_raster_image);
+-- });
+
+-- استخدام مع Leaflet
+-- var rasterLayer = L.tileLayer('/api/raster/{bbox}', {
+--     attribution: 'PostGIS Raster',
+--     maxZoom: 18
+-- });</code></pre>
+            </div>
+
+            <h3>5. استخدام Python للتحليل المتقدم</h3>
+            <div class="code-block">
+                <div class="code-title">تحليل Raster باستخدام Python</div>
+                <pre><code># تثبيت المكتبات
+# pip install rasterio psycopg2 numpy scipy
+
+import rasterio
+from rasterio.warp import transform
+import psycopg2
+from psycopg2.extras import RealDictCursor
+import numpy as np
+
+# الاتصال بقاعدة البيانات
+conn = psycopg2.connect(
+    host="localhost",
+    database="gis_db",
+    user="postgres",
+    password="password"
+)
+
+# قراءة Raster من PostGIS
+cursor = conn.cursor()
+cursor.execute("""
+    SELECT ST_AsGDALRaster(rast, 'GTiff') 
+    FROM elevation 
+    LIMIT 1
+""")
+
+# حفظ كملف مؤقت
+with open('temp_raster.tif', 'wb') as f:
+    f.write(cursor.fetchone()[0])
+
+# قراءة باستخدام rasterio
+with rasterio.open('temp_raster.tif') as src:
+    data = src.read(1)
+    transform = src.transform
+    crs = src.crs
+    
+    # إجراء تحليل
+    mean_elevation = np.mean(data)
+    max_elevation = np.max(data)
+    min_elevation = np.min(data)
+    
+    # حساب المنحدر
+    from scipy import ndimage
+    dx = ndimage.sobel(data, axis=1)
+    dy = ndimage.sobel(data, axis=0)
+    slope = np.arctan(np.sqrt(dx**2 + dy**2)) * 180 / np.pi
+
+# حفظ النتائج مرة أخرى في PostGIS
+# يمكن استخدام raster2pgsql أو gdal_translate</code></pre>
+            </div>
+
+            <h2>أفضل الممارسات للبيانات النقطية</h2>
+            <ul>
+                <li><strong>التقسيم (Tiling):</strong> قسم البيانات الكبيرة إلى بلاطات صغيرة</li>
+                <li><strong>الضغط:</strong> استخدم ضغط مناسب (JPEG للصور، LZW للبيانات)</li>
+                <li><strong>Pyramids:</strong> أنشئ مستويات متعددة للعرض (Overview)</li>
+                <li><strong>الفهارس:</strong> استخدم ST_ConvexHull للفهرسة المكانية</li>
+                <li><strong>التخزين:</strong> استخدم OUTDB للبيانات الكبيرة جداً</li>
+                <li><strong>التحسين:</strong> استخدم ST_Resample للعرض السريع</li>
+            </ul>
+
+            <h2>الخلاصة</h2>
+            <p>في هذه المحاضرة تعلمنا:</p>
+            <ul>
+                <li>مقدمة في البيانات النقطية وأنواعها</li>
+                <li>تثبيت وإعداد PostGIS Raster</li>
+                <li>استيراد البيانات النقطية باستخدام raster2pgsql</li>
+                <li>الاستعلامات الأساسية (ST_Value, ST_SummaryStats)</li>
+                <li>معالجة البيانات النقطية (ST_Clip, ST_MapAlgebra)</li>
+                <li>دمج البيانات النقطية والمتجهة</li>
+                <li>معالجة متقدمة (إعادة العينة، الدمج)</li>
+                <li>تحليل التضاريس المتقدم (TRI, TPI, المنحدرات)</li>
+                <li>تحديد القمم والوديان</li>
+                <li>الربط مع QGIS و ArcGIS للبيانات النقطية</li>
+                <li>نشر البيانات عبر GeoServer (WCS)</li>
+                <li>استخدام البيانات في تطبيقات الويب</li>
+                <li>التحليل المتقدم باستخدام Python</li>
+                <li>أفضل الممارسات للبيانات النقطية</li>
+            </ul>
+
+            <p>في المحاضرة القادمة سنتعلم الطوبولوجيا.</p>
+        </div>
+
+        <div class="navigation">
+            <a href="01-advanced-spatial-analysis.html" class="nav-link prev">← المحاضرة السابقة</a>
+            <a href="03-topology.html" class="nav-link next">المحاضرة التالية →</a>
+        </div>
+    </main>
+
+    <footer class="main-footer">
+        <div class="container">
+            <p>&copy; 2024 دورة PostgreSQL و PostGIS - م. ياسر المفعلاني</p>
+        </div>
+    </footer>
+
+    <script src="../../scripts/main.js"></script>
+</body>
+</html>
+

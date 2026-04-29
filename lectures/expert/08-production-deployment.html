@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>المحاضرة 08: النشر في بيئة الإنتاج - دورة PostgreSQL و PostGIS</title>
+    <link rel="stylesheet" href="../../styles/main.css">
+</head>
+<body>
+    <header class="main-header">
+        <div class="container">
+            <h1>دورة PostgreSQL و PostGIS الشاملة</h1>
+            <p class="instructor">مقدم الدورة: <strong>م. ياسر المفعلاني</strong></p>
+        </div>
+    </header>
+
+    <main class="lecture-content">
+        <div class="lecture-header">
+            <h1>المحاضرة 08: النشر في بيئة الإنتاج</h1>
+            <div class="lecture-meta">
+                <span>المستوى: الخبير</span>
+                <span>المدة: 120 دقيقة</span>
+            </div>
+        </div>
+
+        <div class="lecture-body">
+            <a href="../../index.html" class="back-to-index">← العودة إلى الفهرس</a>
+
+            <h2>مقدمة</h2>
+            <p>
+                النشر في بيئة الإنتاج يتطلب تخطيطًا دقيقًا وإعدادًا محكمًا. في هذه المحاضرة 
+                سنتعلم كيفية إعداد PostgreSQL و PostGIS للإنتاج، التحسين، المراقبة، والصيانة.
+            </p>
+
+            <h2>التخطيط للنشر</h2>
+            <h3>متطلبات النظام</h3>
+            <div class="code-block">
+                <div class="code-title">تحديد الموارد</div>
+                <pre><code># متطلبات النظام الموصى بها:
+# - CPU: 4+ cores
+# - RAM: 8GB+ (16GB+ للقواعد الكبيرة)
+# - Storage: SSD مع مساحة كافية
+# - Network: اتصال مستقر
+
+# حساب الذاكرة:
+# shared_buffers = 25% من RAM
+# effective_cache_size = 50-75% من RAM
+# work_mem = (RAM - shared_buffers) / (max_connections * 3)
+# maintenance_work_mem = 1-2GB</code></pre>
+            </div>
+
+            <h2>إعدادات الإنتاج</h2>
+            <h3>تكوين postgresql.conf</h3>
+            <div class="code-block">
+                <div class="code-title">إعدادات محسّنة للإنتاج</div>
+                <pre><code># ============================================
+# إعدادات الذاكرة
+# ============================================
+shared_buffers = 2GB                    # 25% من RAM
+effective_cache_size = 6GB               # 50-75% من RAM
+work_mem = 16MB                          # لكل عملية
+maintenance_work_mem = 512MB             # للصيانة
+temp_buffers = 8MB
+
+# ============================================
+# إعدادات الاتصالات
+# ============================================
+max_connections = 100                    # حسب الحاجة
+superuser_reserved_connections = 3
+
+# ============================================
+# إعدادات WAL
+# ============================================
+wal_level = replica                      # للنسخ الاحتياطي
+max_wal_size = 1GB
+min_wal_size = 80MB
+checkpoint_timeout = 10min
+checkpoint_completion_target = 0.9
+
+# ============================================
+# إعدادات الاستعلامات
+# ============================================
+random_page_cost = 1.1                   # للـ SSD
+effective_io_concurrency = 200            # للـ SSD
+default_statistics_target = 100
+
+# ============================================
+# إعدادات السجلات
+# ============================================
+logging_collector = on
+log_directory = 'log'
+log_filename = 'postgresql-%Y-%m-%d_%H%M%S.log'
+log_rotation_age = 1d
+log_rotation_size = 100MB
+log_min_duration_statement = 1000         # تسجيل الاستعلامات البطيئة
+log_line_prefix = '%t [%p]: [%l-1] user=%u,db=%d,app=%a,client=%h '
+log_connections = on
+log_disconnections = on
+log_lock_waits = on
+
+# ============================================
+# إعدادات PostGIS
+# ============================================
+# لا توجد إعدادات خاصة، لكن تأكد من:
+# - تثبيت PostGIS بشكل صحيح
+# - إنشاء الفهارس المكانية
+# - تحديث الإحصائيات بانتظام</code></pre>
+            </div>
+
+            <h3>تكوين pg_hba.conf للإنتاج</h3>
+            <div class="code-block">
+                <div class="code-title">إعدادات أمان الإنتاج</div>
+                <pre><code># ============================================
+# إعدادات آمنة للإنتاج
+# ============================================
+
+# الاتصال المحلي - peer
+local   all             all                                     peer
+
+# الاتصال من localhost - md5
+host    all             all             127.0.0.1/32            md5
+
+# اتصال SSL فقط من الشبكة
+hostssl all             all             0.0.0.0/0               md5
+
+# رفض الاتصالات غير المشفرة
+host    all             all             0.0.0.0/0               reject</code></pre>
+            </div>
+
+            <h2>التحسين للأداء</h2>
+            <h3>الفهارس</h3>
+            <div class="code-block">
+                <div class="code-title">إنشاء فهارس محسّنة</div>
+                <pre><code>-- فهارس مكانية
+CREATE INDEX CONCURRENTLY idx_cities_location 
+ON cities USING GIST(location);
+
+-- فهارس على أعمدة شائعة
+CREATE INDEX CONCURRENTLY idx_cities_population 
+ON cities(population);
+
+-- فهارس مركبة
+CREATE INDEX CONCURRENTLY idx_cities_region_pop 
+ON cities(region_id, population);
+
+-- فهارس جزئية
+CREATE INDEX CONCURRENTLY idx_large_cities 
+ON cities(population) 
+WHERE population > 1000000;
+
+-- تحديث الإحصائيات بعد إنشاء الفهارس
+ANALYZE cities;</code></pre>
+            </div>
+
+            <h3>تحسين الاستعلامات</h3>
+            <div class="code-block">
+                <div class="code-title">تحسين الاستعلامات المكانية</div>
+                <pre><code>-- استخدام ST_DWithin بدلاً من ST_Distance
+-- ❌ بطيء
+SELECT * FROM cities c1, cities c2
+WHERE ST_Distance(
+    ST_Transform(c1.location, 3857),
+    ST_Transform(c2.location, 3857)
+) < 10000;
+
+-- ✅ سريع
+SELECT * FROM cities c1, cities c2
+WHERE ST_DWithin(
+    ST_Transform(c1.location, 3857),
+    ST_Transform(c2.location, 3857),
+    10000
+);
+
+-- تحويل الإحداثيات فقط عند الحاجة
+-- ❌ بطيء
+SELECT * FROM cities
+WHERE ST_Transform(location, 3857) && ST_MakeEnvelope(...);
+
+-- ✅ سريع
+SELECT * FROM cities
+WHERE location && ST_Transform(ST_MakeEnvelope(...), 4326);</code></pre>
+            </div>
+
+            <h2>المراقبة في الإنتاج</h2>
+            <h3>إعداد pg_stat_statements</h3>
+            <div class="code-block">
+                <div class="code-title">تتبع الاستعلامات</div>
+                <pre><code>-- تثبيت pg_stat_statements
+CREATE EXTENSION pg_stat_statements;
+
+# في postgresql.conf:
+shared_preload_libraries = 'pg_stat_statements'
+pg_stat_statements.track = all
+pg_stat_statements.max = 10000
+
+-- عرض الاستعلامات البطيئة
+SELECT 
+    query,
+    calls,
+    total_time,
+    mean_time,
+    max_time,
+    rows
+FROM pg_stat_statements
+ORDER BY mean_time DESC
+LIMIT 20;
+
+-- إعادة تعيين الإحصائيات
+SELECT pg_stat_statements_reset();</code></pre>
+            </div>
+
+            <h3>لوحة معلومات المراقبة</h3>
+            <div class="code-block">
+                <div class="code-title">استعلامات المراقبة</div>
+                <pre><code>-- نظرة عامة على النظام
+SELECT 
+    'Database Size' AS metric,
+    pg_size_pretty(pg_database_size(current_database())) AS value
+UNION ALL
+SELECT 
+    'Total Connections',
+    count(*)::text
+FROM pg_stat_activity
+UNION ALL
+SELECT 
+    'Active Connections',
+    count(*)::text
+FROM pg_stat_activity
+WHERE state = 'active'
+UNION ALL
+SELECT 
+    'Cache Hit Ratio',
+    round(100.0 * sum(blks_hit) / NULLIF(sum(blks_hit + blks_read), 0), 2)::text || '%'
+FROM pg_stat_database
+WHERE datname = current_database();
+
+-- مراقبة الجداول الكبيرة
+SELECT 
+    schemaname,
+    tablename,
+    pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS size,
+    n_live_tup AS row_count,
+    last_vacuum,
+    last_autovacuum
+FROM pg_stat_user_tables
+ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC
+LIMIT 10;</code></pre>
+            </div>
+
+            <h2>الصيانة في الإنتاج</h2>
+            <h3>مهام الصيانة المجدولة</h3>
+            <div class="code-block">
+                <div class="code-title">سكريبت صيانة</div>
+                <pre><code>#!/bin/bash
+# maintenance.sh
+
+DB_NAME="gis_db"
+LOG_FILE="/var/log/postgresql/maintenance.log"
+
+echo "$(date): Starting maintenance" >> $LOG_FILE
+
+# VACUUM ANALYZE
+psql -d $DB_NAME -c "VACUUM ANALYZE;" >> $LOG_FILE 2>&1
+
+# REINDEX للفهارس المهمة
+psql -d $DB_NAME -c "REINDEX INDEX CONCURRENTLY idx_cities_location;" >> $LOG_FILE 2>&1
+
+# تحديث الإحصائيات
+psql -d $DB_NAME -c "ANALYZE;" >> $LOG_FILE 2>&1
+
+echo "$(date): Maintenance completed" >> $LOG_FILE
+
+# إضافة إلى crontab (أسبوعياً)
+# 0 3 * * 0 /path/to/maintenance.sh</code></pre>
+            </div>
+
+            <h2>النسخ الاحتياطي في الإنتاج</h2>
+            <div class="code-block">
+                <div class="code-title">استراتيجية النسخ الاحتياطي</div>
+                <pre><code>#!/bin/bash
+# production_backup.sh
+
+BACKUP_DIR="/backup/postgresql"
+DATE=$(date +%Y%m%d_%H%M%S)
+DB_NAME="gis_db"
+RETENTION_DAYS=30
+
+# نسخ احتياطي يومي
+pg_dump -U postgres \
+    -d $DB_NAME \
+    -F c \
+    -f $BACKUP_DIR/daily_backup_$DATE.dump \
+    -v
+
+# ضغط
+gzip $BACKUP_DIR/daily_backup_$DATE.dump
+
+# حذف النسخ القديمة
+find $BACKUP_DIR -name "daily_backup_*.dump.gz" -mtime +$RETENTION_DAYS -delete
+
+# التحقق من النسخة
+if [ -f "$BACKUP_DIR/daily_backup_$DATE.dump.gz" ]; then
+    echo "Backup successful: daily_backup_$DATE.dump.gz"
+    # إرسال إشعار
+else
+    echo "Backup failed!" | mail -s "PostgreSQL Backup Alert" admin@example.com
+fi</code></pre>
+            </div>
+
+            <h2>التحقق من الجاهزية</h2>
+            <div class="code-block">
+                <div class="code-title">قائمة فحص ما قبل النشر</div>
+                <pre><code>-- 1. التحقق من PostGIS
+SELECT PostGIS_Version();
+
+-- 2. التحقق من الفهارس
+SELECT 
+    tablename,
+    indexname
+FROM pg_indexes
+WHERE schemaname = 'public'
+ORDER BY tablename;
+
+-- 3. التحقق من الإحصائيات
+SELECT 
+    schemaname,
+    tablename,
+    last_analyze,
+    last_autoanalyze
+FROM pg_stat_user_tables
+WHERE last_analyze IS NULL OR last_analyze < NOW() - INTERVAL '7 days';
+
+-- 4. التحقق من الاتصالات
+SELECT count(*) FROM pg_stat_activity;
+
+-- 5. التحقق من الأداء
+SELECT 
+    query,
+    mean_time
+FROM pg_stat_statements
+ORDER BY mean_time DESC
+LIMIT 10;</code></pre>
+            </div>
+
+            <h2>الخلاصة</h2>
+            <p>في هذه المحاضرة تعلمنا:</p>
+            <ul>
+                <li>التخطيط للنشر في الإنتاج</li>
+                <li>إعدادات postgresql.conf المحسّنة</li>
+                <li>تكوين الأمان للإنتاج</li>
+                <li>تحسين الأداء (الفهارس والاستعلامات)</li>
+                <li>المراقبة في الإنتاج</li>
+                <li>مهام الصيانة المجدولة</li>
+                <li>استراتيجيات النسخ الاحتياطي</li>
+                <li>قائمة فحص الجاهزية</li>
+            </ul>
+
+            <div class="alert alert-success">
+                <strong>تهانينا!</strong> لقد أكملت دورة PostgreSQL و PostGIS الشاملة من المبتدئ إلى الاحتراف! 
+                أنت الآن جاهز لبناء أنظمة قواعد بيانات جغرافية احترافية.
+            </div>
+        </div>
+
+        <div class="navigation">
+            <a href="07-security-best-practices.html" class="nav-link prev">← المحاضرة السابقة</a>
+            <a href="09-gis-integration.html" class="nav-link next">المحاضرة التالية: الربط المتقدم مع برامج GIS →</a>
+        </div>
+    </main>
+
+    <footer class="main-footer">
+        <div class="container">
+            <p>&copy; 2024 دورة PostgreSQL و PostGIS - م. ياسر المفعلاني</p>
+        </div>
+    </footer>
+
+    <script src="../../scripts/main.js"></script>
+</body>
+</html>
+

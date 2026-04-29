@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>المحاضرة 09: الربط المتقدم مع برامج GIS - دورة PostgreSQL و PostGIS</title>
+    <link rel="stylesheet" href="../../styles/main.css">
+</head>
+<body>
+    <header class="main-header">
+        <div class="container">
+            <h1>دورة PostgreSQL و PostGIS الشاملة</h1>
+            <p class="instructor">مقدم الدورة: <strong>م. ياسر المفعلاني</strong></p>
+        </div>
+    </header>
+
+    <main class="lecture-content">
+        <div class="lecture-header">
+            <h1>المحاضرة 09: الربط المتقدم مع برامج نظم المعلومات الجغرافية</h1>
+            <div class="lecture-meta">
+                <span>المستوى: الخبير</span>
+                <span>المدة: 150 دقيقة</span>
+            </div>
+        </div>
+
+        <div class="lecture-body">
+            <a href="../../index.html" class="back-to-index">← العودة إلى الفهرس</a>
+
+            <h2>مقدمة</h2>
+            <p>
+                في هذه المحاضرة المتخصصة سنتعلم الربط المتقدم بين PostGIS وبرامج نظم المعلومات 
+                الجغرافية المختلفة. سنغطي التكامل مع QGIS، ArcGIS، GeoServer، MapServer، 
+                وتطبيقات الويب الحديثة.
+            </p>
+
+            <h2>1. الربط المتقدم مع QGIS</h2>
+            <h3>إعداد الاتصال المحسّن</h3>
+            <div class="code-block">
+                <div class="code-title">إعدادات متقدمة للاتصال</div>
+                <pre><code>-- إنشاء مستخدم خاص لـ QGIS
+CREATE USER qgis_user WITH PASSWORD 'secure_password';
+GRANT CONNECT ON DATABASE gis_db TO qgis_user;
+GRANT USAGE ON SCHEMA public TO qgis_user;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO qgis_user;
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO qgis_user;
+
+-- إنشاء Views محسّنة للعرض
+CREATE VIEW qgis_cities_view AS
+SELECT 
+    id,
+    name,
+    population,
+    location AS geom,  -- QGIS يتوقع 'geom'
+    CASE 
+        WHEN population > 5000000 THEN 1
+        WHEN population > 2000000 THEN 2
+        WHEN population > 1000000 THEN 3
+        ELSE 4
+    END AS size_code
+FROM cities;
+
+-- إضافة عمود للتصنيف
+ALTER VIEW qgis_cities_view ADD COLUMN category VARCHAR(50);
+UPDATE qgis_cities_view SET category = 
+    CASE size_code
+        WHEN 1 THEN 'كبيرة جداً'
+        WHEN 2 THEN 'كبيرة'
+        WHEN 3 THEN 'متوسطة'
+        ELSE 'صغيرة'
+    END;</code></pre>
+            </div>
+
+            <h3>استخدام QGIS للتحليل المكاني</h3>
+            <div class="code-block">
+                <div class="code-title">تصدير نتائج التحليل</div>
+                <pre><code>-- في QGIS:
+-- 1. قم بإجراء التحليل (مثل Buffer, Intersection, Union)
+-- 2. احفظ النتيجة
+-- 3. Database > DB Manager > PostGIS
+-- 4. Import Layer/File
+-- 5. اختر الطبقة المحفوظة
+-- 6. حدد Schema و Table name
+-- 7. Import
+
+-- أو استخدام ogr2ogr
+ogr2ogr -f "PostgreSQL" \
+    PG:"host=localhost user=postgres dbname=gis_db password=pass" \
+    analysis_result.shp \
+    -nln analysis_results \
+    -lco GEOMETRY_NAME=geometry \
+    -lco FID=id \
+    -overwrite
+
+-- استخدام QGIS Processing مع PostGIS
+-- في QGIS Processing:
+-- 1. Database > PostGIS Execute and load SQL
+-- 2. أدخل استعلام SQL
+-- 3. Execute
+-- 4. Load as new layer</code></pre>
+            </div>
+
+            <h3>إنشاء QGIS Projects مع PostGIS</h3>
+            <div class="code-block">
+                <div class="code-title">إدارة المشاريع</div>
+                <pre><code>-- إنشاء جدول لإدارة المشاريع
+CREATE TABLE qgis_projects (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100),
+    description TEXT,
+    project_file BYTEA,  -- ملف .qgs
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- حفظ إعدادات الطبقات
+CREATE TABLE qgis_layer_styles (
+    id SERIAL PRIMARY KEY,
+    layer_name VARCHAR(100),
+    style_name VARCHAR(100),
+    style_xml XML,  -- QML style
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- استخدام QGIS Server
+-- QGIS Server يمكنه استخدام PostGIS مباشرة
+-- في ملف QGIS Project:
+-- 1. استخدم PostGIS layers
+-- 2. احفظ المشروع
+-- 3. ضع المشروع في مجلد QGIS Server
+-- 4. QGIS Server سيعرض الطبقات كخدمات WMS/WFS</code></pre>
+            </div>
+
+            <h2>2. الربط المتقدم مع ArcGIS</h2>
+            <h3>إعداد ArcGIS Enterprise</h3>
+            <div class="code-block">
+                <div class="code-title">تكوين ArcGIS Server</div>
+                <pre><code>-- إنشاء مستخدم لـ ArcGIS
+CREATE USER arcgis_user WITH PASSWORD 'secure_password';
+GRANT CONNECT ON DATABASE gis_db TO arcgis_user;
+GRANT USAGE ON SCHEMA public TO arcgis_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO arcgis_user;
+
+-- إنشاء Feature Class محسّن
+CREATE TABLE arcgis_features (
+    objectid SERIAL PRIMARY KEY,
+    shape GEOMETRY(POINT, 4326),
+    name VARCHAR(100),
+    population INTEGER,
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- إضافة فهرس
+CREATE INDEX idx_arcgis_shape ON arcgis_features USING GIST(shape);
+
+-- ArcGIS يتوقع أعمدة معينة
+ALTER TABLE arcgis_features 
+ADD COLUMN globalid UUID DEFAULT gen_random_uuid();
+
+-- إنشاء View للعرض
+CREATE VIEW arcgis_cities_view AS
+SELECT 
+    id AS objectid,
+    location AS shape,
+    name,
+    population,
+    CURRENT_TIMESTAMP AS created_date
+FROM cities;</code></pre>
+            </div>
+
+            <h3>استخدام ArcGIS Pro</h3>
+            <div class="code-block">
+                <div class="code-title">التكامل مع ArcGIS Pro</div>
+                <pre><code>-- في ArcGIS Pro:
+-- 1. Catalog > Databases > Add Database Connection
+-- 2. Platform: PostgreSQL
+-- 3. Instance: localhost:5432
+-- 4. Database: gis_db
+-- 5. Authentication: Database
+-- 6. Username: arcgis_user
+-- 7. Password: [كلمة المرور]
+
+-- استخدام ArcPy للتحليل
+-- import arcpy
+-- arcpy.env.workspace = "Database Connections/PostGIS.sde"
+-- 
+-- # قراءة البيانات
+-- cities = arcpy.da.SearchCursor("cities", ["name", "population", "SHAPE@"])
+-- 
+-- # إجراء تحليل
+-- arcpy.Buffer_analysis("cities", "cities_buffer", "10 Kilometers")
+-- 
+-- # تصدير النتائج
+-- arcpy.CopyFeatures_management("cities_buffer", "postgis://localhost/gis_db/cities_buffer")
+
+-- نشر كخدمة Feature Service
+-- 1. في ArcGIS Pro: Share > Web Layer
+-- 2. اختر Feature Layer
+-- 3. حدد البيانات من PostGIS
+-- 4. Publish
+-- 5. الخدمة ستستخدم PostGIS كـ data source</code></pre>
+            </div>
+
+            <h2>3. نشر الخدمات الجغرافية (GeoServer)</h2>
+            <h3>إعداد GeoServer المتقدم</h3>
+            <div class="code-block">
+                <div class="code-title">تكوين محسّن</div>
+                <pre><code>-- إنشاء مستخدم لـ GeoServer
+CREATE USER geoserver_user WITH PASSWORD 'secure_password';
+GRANT CONNECT ON DATABASE gis_db TO geoserver_user;
+GRANT USAGE ON SCHEMA public TO geoserver_user;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO geoserver_user;
+
+-- إنشاء Views محسّنة للخدمات
+CREATE VIEW geoserver_cities_wms AS
+SELECT 
+    id,
+    name,
+    population,
+    ST_Simplify(location, 0.001) AS geometry  -- تبسيط للعرض السريع
+FROM cities
+WHERE population > 100000;
+
+-- View للـ WFS (تحرير)
+CREATE VIEW geoserver_cities_wfs AS
+SELECT 
+    id,
+    name,
+    population,
+    location AS geometry
+FROM cities;
+
+-- إعدادات GeoServer في ملف geoserver.xml:
+-- &lt;connectionPool&gt;
+--     &lt;maxConnections&gt;10&lt;/maxConnections&gt;
+--     &lt;minConnections&gt;1&lt;/minConnections&gt;
+--     &lt;connectionTimeout&gt;20&lt;/connectionTimeout&gt;
+-- &lt;/connectionPool&gt;</code></pre>
+            </div>
+
+            <h3>خدمات WMS, WFS, WCS</h3>
+            <div class="code-block">
+                <div class="code-title">نشر الخدمات</div>
+                <pre><code>-- WMS (Web Map Service) - للعرض فقط
+-- في GeoServer:
+-- 1. Layers > Add a new resource
+-- 2. اختر PostGIS store
+-- 3. اختر Table أو View
+-- 4. Publish
+-- 5. حدد SRS و Bounding Box
+-- 6. Save
+
+-- WFS (Web Feature Service) - للتحرير
+-- 1. نفس الخطوات
+-- 2. في Publishing tab:
+--    - Enable WFS
+--    - Enable Transactions (للتحرير)
+-- 3. Save
+
+-- WCS (Web Coverage Service) - للبيانات النقطية
+-- 1. Stores > Add new store > PostGIS
+-- 2. اختر Coverage (للـ Raster)
+-- 3. Publish Coverage
+-- 4. Save
+
+-- استخدام الخدمات في التطبيقات
+-- مثال WMS:
+-- http://localhost:8080/geoserver/wms?
+--     service=WMS&
+--     version=1.1.0&
+--     request=GetMap&
+--     layers=cities&
+--     styles=&
+--     bbox=46,24,50,27&
+--     width=800&
+--     height=600&
+--     srs=EPSG:4326&
+--     format=image/png
+
+-- مثال WFS:
+-- http://localhost:8080/geoserver/wfs?
+--     service=WFS&
+--     version=1.1.0&
+--     request=GetFeature&
+--     typeName=cities&
+--     outputFormat=application/json</code></pre>
+            </div>
+
+            <h2>4. تطبيقات الويب الحديثة</h2>
+            <h3>Leaflet مع PostGIS</h3>
+            <div class="code-block">
+                <div class="code-title">إنشاء API للخرائط</div>
+                <pre><code>-- دالة لإرجاع GeoJSON
+CREATE OR REPLACE FUNCTION get_cities_geojson(
+    bbox GEOMETRY DEFAULT NULL,
+    min_population INTEGER DEFAULT 0,
+    limit_count INTEGER DEFAULT 1000
+)
+RETURNS TEXT AS $$
+DECLARE
+    result TEXT;
+BEGIN
+    SELECT json_build_object(
+        'type', 'FeatureCollection',
+        'features', json_agg(
+            json_build_object(
+                'type', 'Feature',
+                'id', id,
+                'geometry', ST_AsGeoJSON(location)::json,
+                'properties', json_build_object(
+                    'name', name,
+                    'population', population
+                )
+            )
+        )
+    )::TEXT
+    INTO result
+    FROM cities
+    WHERE population >= min_population
+      AND (bbox IS NULL OR ST_Intersects(location, bbox))
+    LIMIT limit_count;
+    
+    RETURN COALESCE(result, '{"type":"FeatureCollection","features":[]}');
+END;
+$$ LANGUAGE plpgsql;
+
+-- استخدام في Node.js/Express
+-- const express = require('express');
+-- const { Pool } = require('pg');
+-- const app = express();
+-- 
+-- const pool = new Pool({
+--     host: 'localhost',
+--     database: 'gis_db',
+--     user: 'postgres',
+--     password: 'password'
+-- });
+-- 
+-- app.get('/api/cities', async (req, res) => {
+--     const { bbox, min_pop } = req.query;
+--     const bbox_geom = bbox ? 
+--         `ST_MakeEnvelope(${bbox.split(',')})` : 'NULL';
+--     const query = `SELECT get_cities_geojson(${bbox_geom}, ${min_pop || 0})`;
+--     const result = await pool.query(query);
+--     res.json(JSON.parse(result.rows[0].get_cities_geojson));
+-- });
+-- 
+-- // في Leaflet
+-- fetch('/api/cities?bbox=46,24,50,27&min_pop=1000000')
+--     .then(res => res.json())
+--     .then(data => {
+--         L.geoJSON(data).addTo(map);
+--     });</code></pre>
+            </div>
+
+            <h3>OpenLayers مع PostGIS</h3>
+            <div class="code-block">
+                <div class="code-title">تكامل OpenLayers</div>
+                <pre><code>-- دالة لإرجاع Vector Tiles
+CREATE OR REPLACE FUNCTION get_vector_tiles(
+    z INTEGER,
+    x INTEGER,
+    y INTEGER
+)
+RETURNS BYTEA AS $$
+DECLARE
+    bbox GEOMETRY;
+    result BYTEA;
+BEGIN
+    -- حساب bbox للبلاط
+    bbox := ST_TileEnvelope(z, x, y);
+    
+    -- إرجاع البيانات كـ MVT
+    SELECT ST_AsMVT(q, 'cities', 4096, 'geometry')
+    INTO result
+    FROM (
+        SELECT 
+            id,
+            name,
+            population,
+            ST_AsMVTGeom(location, bbox, 4096, 256, true) AS geometry
+        FROM cities
+        WHERE ST_Intersects(location, bbox)
+    ) AS q;
+    
+    RETURN result;
+END;
+$$ LANGUAGE plpgsql;
+
+-- استخدام في OpenLayers
+-- const vectorTileSource = new ol.source.VectorTile({
+--     format: new ol.format.MVT(),
+--     tileGrid: ol.tilegrid.createXYZ(),
+--     tileUrlFunction: function(tileCoord) {
+--         const z = tileCoord[0];
+--         const x = tileCoord[1];
+--         const y = tileCoord[2];
+--         return `/api/tiles/${z}/${x}/${y}`;
+--     }
+-- });</code></pre>
+            </div>
+
+            <h2>5. Python و GeoPandas</h2>
+            <div class="code-block">
+                <div class="code-title">تحليل متقدم باستخدام Python</div>
+                <pre><code># تثبيت المكتبات
+# pip install geopandas psycopg2 sqlalchemy folium
+
+import geopandas as gpd
+import pandas as pd
+from sqlalchemy import create_engine
+import folium
+
+# الاتصال
+engine = create_engine('postgresql://postgres:password@localhost:5432/gis_db')
+
+# قراءة البيانات
+cities = gpd.read_postgis(
+    "SELECT * FROM cities WHERE population > 1000000",
+    engine,
+    geom_col='location'
+)
+
+# إجراء تحليل
+cities['density'] = cities['population'] / cities.geometry.buffer(0.01).area
+
+# حفظ النتائج
+cities.to_postgis('cities_analyzed', engine, if_exists='replace')
+
+# إنشاء خريطة تفاعلية
+m = folium.Map(location=[24.7136, 46.6753], zoom_start=6)
+for idx, row in cities.iterrows():
+    folium.CircleMarker(
+        location=[row.geometry.y, row.geometry.x],
+        radius=row['population'] / 100000,
+        popup=row['name'],
+        color='red',
+        fill=True
+    ).add_to(m)
+m.save('map.html')</code></pre>
+            </div>
+
+            <h2>6. MapServer</h2>
+            <div class="code-block">
+                <div class="code-title">إعداد MapServer</div>
+                <pre><code># ملف mapfile.map
+MAP
+    NAME "PostGIS Map Server"
+    STATUS ON
+    SIZE 1200 800
+    EXTENT 46.0 24.0 50.0 27.0
+    UNITS DD
+    IMAGECOLOR 255 255 255
+    
+    # اتصال PostGIS
+    CONNECTIONTYPE postgis
+    CONNECTION "host=localhost port=5432 dbname=gis_db user=postgres password=pass"
+    
+    # طبقة المدن
+    LAYER
+        NAME "cities"
+        TYPE POINT
+        STATUS ON
+        CONNECTION "cities"
+        DATA "location FROM cities USING UNIQUE id USING srid=4326"
+        
+        CLASSITEM "population"
+        CLASS
+            NAME "Large Cities"
+            EXPRESSION ([population] > 5000000)
+            STYLE
+                SYMBOL "circle"
+                SIZE 12
+                COLOR 255 0 0
+            END
+        END
+        CLASS
+            NAME "Medium Cities"
+            EXPRESSION ([population] > 2000000 AND [population] <= 5000000)
+            STYLE
+                SYMBOL "circle"
+                SIZE 8
+                COLOR 255 165 0
+            END
+        END
+        CLASS
+            NAME "Small Cities"
+            EXPRESSION ([population] <= 2000000)
+            STYLE
+                SYMBOL "circle"
+                SIZE 4
+                COLOR 0 0 255
+            END
+        END
+    END
+    
+    # طبقة الطرق
+    LAYER
+        NAME "roads"
+        TYPE LINE
+        STATUS ON
+        CONNECTION "roads"
+        DATA "geometry FROM roads USING UNIQUE id USING srid=4326"
+        
+        CLASS
+            STYLE
+                COLOR 128 128 128
+                WIDTH 2
+            END
+        END
+    END
+END</code></pre>
+            </div>
+
+            <h2>أفضل الممارسات للتكامل</h2>
+            <ul>
+                <li><strong>الأمان:</strong> استخدم مستخدمين بصلاحيات محدودة</li>
+                <li><strong>الأداء:</strong> استخدم Views محسّنة و Materialized Views</li>
+                <li><strong>الفهارس:</strong> تأكد من وجود فهارس مكانية</li>
+                <li><strong>التخزين المؤقت:</strong> استخدم caching للبيانات الثابتة</li>
+                <li><strong>التحسين:</strong> استخدم ST_Simplify للعرض السريع</li>
+                <li><strong>التوثيق:</strong> وثق جميع الاتصالات والإعدادات</li>
+            </ul>
+
+            <h2>الخلاصة</h2>
+            <p>في هذه المحاضرة تعلمنا:</p>
+            <ul>
+                <li>الربط المتقدم مع QGIS</li>
+                <li>التكامل مع ArcGIS Enterprise و ArcGIS Pro</li>
+                <li>نشر الخدمات عبر GeoServer (WMS, WFS, WCS)</li>
+                <li>تطبيقات الويب الحديثة (Leaflet, OpenLayers)</li>
+                <li>التحليل باستخدام Python و GeoPandas</li>
+                <li>إعداد MapServer</li>
+                <li>أفضل الممارسات للتكامل</li>
+            </ul>
+        </div>
+
+        <div class="navigation">
+            <a href="08-production-deployment.html" class="nav-link prev">← المحاضرة السابقة</a>
+            <a href="../../index.html" class="nav-link next">العودة إلى الفهرس →</a>
+        </div>
+    </main>
+
+    <footer class="main-footer">
+        <div class="container">
+            <p>&copy; 2024 دورة PostgreSQL و PostGIS - م. ياسر المفعلاني</p>
+        </div>
+    </footer>
+
+    <script src="../../scripts/main.js"></script>
+</body>
+</html>
+

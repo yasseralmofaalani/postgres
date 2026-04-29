@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>المحاضرة 04: الهندسة ثلاثية الأبعاد - دورة PostgreSQL و PostGIS</title>
+    <link rel="stylesheet" href="../../styles/main.css">
+</head>
+<body>
+    <header class="main-header">
+        <div class="container">
+            <h1>دورة PostgreSQL و PostGIS الشاملة</h1>
+            <p class="instructor">مقدم الدورة: <strong>م. ياسر المفعلاني</strong></p>
+        </div>
+    </header>
+
+    <main class="lecture-content">
+        <div class="lecture-header">
+            <h1>المحاضرة 04: الهندسة ثلاثية الأبعاد</h1>
+            <div class="lecture-meta">
+                <span>المستوى: الخبير</span>
+                <span>المدة: 90 دقيقة</span>
+            </div>
+        </div>
+
+        <div class="lecture-body">
+            <a href="../../index.html" class="back-to-index">← العودة إلى الفهرس</a>
+
+            <h2>مقدمة في البيانات ثلاثية الأبعاد</h2>
+            <p>
+                البيانات ثلاثية الأبعاد تضيف بعد الارتفاع (Z) إلى البيانات الجغرافية. 
+                هذا مفيد في تمثيل المباني، التضاريس، والبنية التحتية ثلاثية الأبعاد. 
+                PostGIS يدعم البيانات ثلاثية الأبعاد بشكل كامل.
+            </p>
+
+            <div class="definition-list">
+                <dt>البيانات ثلاثية الأبعاد:</dt>
+                <dd>بيانات جغرافية تحتوي على إحداثيات X, Y, Z</dd>
+                
+                <dt>Z Coordinate:</dt>
+                <dd>إحداثي الارتفاع أو العمق</dd>
+                
+                <dt>3D Geometry:</dt>
+                <dd>هندسة تحتوي على معلومات الارتفاع</dd>
+            </div>
+
+            <h2>إنشاء البيانات ثلاثية الأبعاد</h2>
+            <h3>النقاط ثلاثية الأبعاد</h3>
+            <div class="code-block">
+                <div class="code-title">إنشاء نقاط 3D</div>
+                <pre><code>-- نقطة ثلاثية الأبعاد بسيطة
+SELECT ST_MakePoint(46.6753, 24.7136, 600) AS point_3d;
+
+-- نقطة مع SRID
+SELECT ST_SetSRID(ST_MakePoint(46.6753, 24.7136, 600), 4326) AS point_3d;
+
+-- استخدام WKT
+SELECT ST_GeomFromText('POINT Z (46.6753 24.7136 600)', 4326) AS point_3d;
+
+-- إنشاء جدول للنقاط 3D
+CREATE TABLE buildings_3d (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100),
+    location GEOMETRY(POINTZ, 4326),
+    height_m NUMERIC
+);
+
+-- إدراج بيانات
+INSERT INTO buildings_3d (name, location, height_m) VALUES
+    ('مبنى 1', ST_SetSRID(ST_MakePoint(46.6753, 24.7136, 600), 4326), 150),
+    ('مبنى 2', ST_SetSRID(ST_MakePoint(46.6760, 24.7140, 610), 4326), 200);</code></pre>
+            </div>
+
+            <h3>الخطوط ثلاثية الأبعاد</h3>
+            <div class="code-block">
+                <div class="code-title">إنشاء خطوط 3D</div>
+                <pre><code>-- خط ثلاثي الأبعاد
+SELECT ST_GeomFromText(
+    'LINESTRING Z (46.6753 24.7136 600, 46.6760 24.7140 610, 46.6770 24.7150 620)',
+    4326
+) AS line_3d;
+
+-- خط من نقاط
+SELECT ST_MakeLine(ARRAY[
+    ST_MakePoint(46.6753, 24.7136, 600),
+    ST_MakePoint(46.6760, 24.7140, 610),
+    ST_MakePoint(46.6770, 24.7150, 620)
+]) AS line_3d;
+
+-- جدول للأنابيب أو الكابلات
+CREATE TABLE pipelines_3d (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100),
+    geometry GEOMETRY(LINESTRINGZ, 4326),
+    depth_m NUMERIC
+);</code></pre>
+            </div>
+
+            <h3>المضلعات ثلاثية الأبعاد</h3>
+            <div class="code-block">
+                <div class="code-title">إنشاء مضلعات 3D</div>
+                <pre><code>-- مضلع ثلاثي الأبعاد
+SELECT ST_GeomFromText(
+    'POLYGON Z ((
+        46.6 24.7 600,
+        46.7 24.7 610,
+        46.7 24.8 620,
+        46.6 24.8 615,
+        46.6 24.7 600
+    ))',
+    4326
+) AS polygon_3d;
+
+-- جدول للمناطق ثلاثية الأبعاد
+CREATE TABLE terrain_3d (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100),
+    surface GEOMETRY(POLYGONZ, 4326)
+);</code></pre>
+            </div>
+
+            <h2>استخراج المعلومات من البيانات 3D</h2>
+            <h3>استخراج الإحداثيات</h3>
+            <div class="code-block">
+                <div class="code-title">استخراج الإحداثيات</div>
+                <pre><code>-- استخراج Z
+SELECT 
+    name,
+    ST_X(location) AS longitude,
+    ST_Y(location) AS latitude,
+    ST_Z(location) AS elevation
+FROM buildings_3d;
+
+-- التحقق من البعد
+SELECT 
+    name,
+    ST_NDims(location) AS dimensions,
+    ST_Dimension(location) AS geometric_dimension
+FROM buildings_3d;
+
+-- استخراج Z من خط
+SELECT 
+    name,
+    ST_Z(ST_StartPoint(geometry)) AS start_elevation,
+    ST_Z(ST_EndPoint(geometry)) AS end_elevation,
+    ST_Z(ST_EndPoint(geometry)) - ST_Z(ST_StartPoint(geometry)) AS elevation_change
+FROM pipelines_3d;</code></pre>
+            </div>
+
+            <h2>القياسات ثلاثية الأبعاد</h2>
+            <h3>حساب المسافة 3D</h3>
+            <div class="code-block">
+                <div class="code-title">المسافة ثلاثية الأبعاد</div>
+                <pre><code>-- المسافة 3D بين نقطتين
+SELECT 
+    b1.name AS building1,
+    b2.name AS building2,
+    ST_3DDistance(
+        ST_Transform(b1.location, 3857),
+        ST_Transform(b2.location, 3857)
+    ) / 1000 AS distance_3d_km
+FROM buildings_3d b1, buildings_3d b2
+WHERE b1.id < b2.id;
+
+-- المسافة الأفقية والعمودية
+SELECT 
+    b1.name AS building1,
+    b2.name AS building2,
+    ST_Distance(
+        ST_Transform(ST_MakePoint(ST_X(b1.location), ST_Y(b1.location)), 3857),
+        ST_Transform(ST_MakePoint(ST_X(b2.location), ST_Y(b2.location)), 3857)
+    ) / 1000 AS horizontal_distance_km,
+    ABS(ST_Z(b1.location) - ST_Z(b2.location)) AS vertical_distance_m
+FROM buildings_3d b1, buildings_3d b2
+WHERE b1.id < b2.id;</code></pre>
+            </div>
+
+            <h3>حساب الطول 3D</h3>
+            <div class="code-block">
+                <div class="code-title">طول الخط 3D</div>
+                <pre><code>-- طول خط ثلاثي الأبعاد
+SELECT 
+    name,
+    ST_3DLength(ST_Transform(geometry, 3857)) AS length_3d_meters
+FROM pipelines_3d;
+
+-- مقارنة الطول 2D و 3D
+SELECT 
+    name,
+    ST_Length(ST_Transform(geometry, 3857)) AS length_2d,
+    ST_3DLength(ST_Transform(geometry, 3857)) AS length_3d,
+    ST_3DLength(ST_Transform(geometry, 3857)) - 
+    ST_Length(ST_Transform(geometry, 3857)) AS difference
+FROM pipelines_3d;</code></pre>
+            </div>
+
+            <h3>حساب المساحة 3D</h3>
+            <div class="code-block">
+                <div class="code-title">مساحة السطح 3D</div>
+                <pre><code>-- مساحة سطح مضلع ثلاثي الأبعاد
+SELECT 
+    name,
+    ST_3DArea(ST_Transform(surface, 3857)) AS surface_area_sqm
+FROM terrain_3d;
+
+-- مساحة الإسقاط (2D)
+SELECT 
+    name,
+    ST_Area(ST_Transform(ST_Force2D(surface), 3857)) AS projected_area_sqm,
+    ST_3DArea(ST_Transform(surface, 3857)) AS surface_area_sqm
+FROM terrain_3d;</code></pre>
+            </div>
+
+            <h2>التحويلات ثلاثية الأبعاد</h2>
+            <div class="code-block">
+                <div class="code-title">تحويلات 3D</div>
+                <pre><code>-- تحويل 2D إلى 3D
+SELECT 
+    ST_Force3D(location, 0) AS point_3d  -- إضافة Z = 0
+FROM cities;
+
+-- تحويل 3D إلى 2D
+SELECT 
+    ST_Force2D(location) AS point_2d
+FROM buildings_3d;
+
+-- استخراج Z كعمود منفصل
+ALTER TABLE cities ADD COLUMN elevation NUMERIC;
+UPDATE cities SET elevation = ST_Z(location)
+WHERE ST_NDims(location) = 3;</code></pre>
+            </div>
+
+            <h2>التحليل المكاني 3D</h2>
+            <h3>المناطق العازلة 3D</h3>
+            <div class="code-block">
+                <div class="code-title">مناطق عازلة ثلاثية الأبعاد</div>
+                <pre><code>-- منطقة عازلة 3D حول نقطة
+SELECT 
+    name,
+    ST_Buffer(
+        ST_Transform(location, 3857),
+        1000  -- 1 كيلومتر
+    ) AS buffer_2d,
+    -- ملاحظة: ST_Buffer لا يدعم 3D مباشرة
+    -- يمكن استخدام ST_Extrude أو ST_Translate
+    ST_Translate(
+        ST_Buffer(ST_Transform(location, 3857), 1000),
+        0, 0, height_m
+    ) AS buffer_3d_approximation
+FROM buildings_3d;</code></pre>
+            </div>
+
+            <h3>التحليل الطبوغرافي</h3>
+            <div class="code-block">
+                <div class="code-title">تحليل التضاريس</div>
+                <pre><code>-- حساب المنحدر من بيانات 3D
+CREATE TABLE slope_analysis AS
+SELECT 
+    id,
+    name,
+    ST_Z(ST_StartPoint(geometry)) AS start_elevation,
+    ST_Z(ST_EndPoint(geometry)) AS end_elevation,
+    ST_Length(ST_Transform(geometry, 3857)) AS horizontal_length,
+    ABS(ST_Z(ST_EndPoint(geometry)) - ST_Z(ST_StartPoint(geometry))) AS vertical_change,
+    ATAN(
+        ABS(ST_Z(ST_EndPoint(geometry)) - ST_Z(ST_StartPoint(geometry))) /
+        ST_Length(ST_Transform(geometry, 3857))
+    ) * 180 / PI() AS slope_degrees
+FROM pipelines_3d
+WHERE ST_NDims(geometry) = 3;
+
+-- العثور على أعلى وأقل نقطة
+SELECT 
+    name,
+    ST_Z(ST_StartPoint(geometry)) AS elevation,
+    'start' AS point_type
+FROM pipelines_3d
+UNION ALL
+SELECT 
+    name,
+    ST_Z(ST_EndPoint(geometry)),
+    'end'
+FROM pipelines_3d
+ORDER BY elevation DESC;</code></pre>
+            </div>
+
+            <h2>تمثيل المباني ثلاثية الأبعاد</h2>
+            <div class="code-block">
+                <div class="code-title">نمذجة المباني 3D</div>
+                <pre><code>-- إنشاء جدول للمباني
+CREATE TABLE buildings_3d_model (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100),
+    footprint GEOMETRY(POLYGON, 4326),  -- القاعدة
+    height_m NUMERIC,                    -- الارتفاع
+    base_elevation NUMERIC              -- ارتفاع القاعدة
+);
+
+-- إنشاء هندسة 3D للمبنى
+CREATE OR REPLACE FUNCTION create_building_3d(
+    footprint GEOMETRY,
+    height NUMERIC,
+    base_elevation NUMERIC DEFAULT 0
+)
+RETURNS GEOMETRY AS $$
+DECLARE
+    building_3d GEOMETRY;
+BEGIN
+    -- رفع القاعدة إلى الارتفاع الأساسي
+    building_3d := ST_Translate(
+        ST_Force3D(footprint, base_elevation),
+        0, 0, base_elevation
+    );
+    
+    -- يمكن إضافة السقف والجدران هنا
+    RETURN building_3d;
+END;
+$$ LANGUAGE plpgsql;
+
+-- استخدام الدالة
+SELECT 
+    name,
+    create_building_3d(footprint, height_m, base_elevation) AS building_geometry
+FROM buildings_3d_model;</code></pre>
+            </div>
+
+            <h2>مثال شامل: نظام معلومات ثلاثي الأبعاد</h2>
+            <div class="code-block">
+                <div class="code-title">نظام 3D متكامل</div>
+                <pre><code>-- إنشاء قاعدة بيانات 3D
+CREATE DATABASE city_3d;
+\c city_3d
+CREATE EXTENSION postgis;
+
+-- جدول المباني
+CREATE TABLE buildings (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100),
+    location GEOMETRY(POINTZ, 4326),
+    height_m NUMERIC,
+    footprint GEOMETRY(POLYGON, 4326)
+);
+
+-- جدول الطرق
+CREATE TABLE roads_3d (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(200),
+    geometry GEOMETRY(LINESTRINGZ, 4326)
+);
+
+-- جدول التضاريس
+CREATE TABLE terrain (
+    id SERIAL PRIMARY KEY,
+    surface GEOMETRY(POLYGONZ, 4326)
+);
+
+-- تحليل الارتفاع
+CREATE VIEW elevation_analysis AS
+SELECT 
+    'buildings' AS feature_type,
+    COUNT(*) AS count,
+    AVG(ST_Z(location)) AS avg_elevation,
+    MIN(ST_Z(location)) AS min_elevation,
+    MAX(ST_Z(location)) AS max_elevation
+FROM buildings
+WHERE ST_NDims(location) = 3
+UNION ALL
+SELECT 
+    'roads',
+    COUNT(*),
+    AVG((ST_Z(ST_StartPoint(geometry)) + ST_Z(ST_EndPoint(geometry))) / 2),
+    MIN(LEAST(ST_Z(ST_StartPoint(geometry)), ST_Z(ST_EndPoint(geometry)))),
+    MAX(GREATEST(ST_Z(ST_StartPoint(geometry)), ST_Z(ST_EndPoint(geometry))))
+FROM roads_3d
+WHERE ST_NDims(geometry) = 3;
+
+-- حساب الحجم الإجمالي للمباني
+SELECT 
+    SUM(
+        ST_Area(ST_Transform(footprint, 3857)) * height_m
+    ) / 1000000 AS total_volume_million_cubic_meters
+FROM buildings;</code></pre>
+            </div>
+
+            <h2>الخلاصة</h2>
+            <p>في هذه المحاضرة تعلمنا:</p>
+            <ul>
+                <li>مقدمة في البيانات ثلاثية الأبعاد</li>
+                <li>إنشاء نقاط وخطوط ومضلعات 3D</li>
+                <li>استخراج المعلومات من البيانات 3D</li>
+                <li>القياسات ثلاثية الأبعاد (المسافة، الطول، المساحة)</li>
+                <li>التحويلات بين 2D و 3D</li>
+                <li>التحليل المكاني 3D</li>
+                <li>تمثيل المباني والبنية التحتية ثلاثية الأبعاد</li>
+                <li>بناء أنظمة معلومات ثلاثية الأبعاد</li>
+            </ul>
+
+            <p>في المحاضرة القادمة سنتعلم إدارة قواعد البيانات.</p>
+        </div>
+
+        <div class="navigation">
+            <a href="03-topology.html" class="nav-link prev">← المحاضرة السابقة</a>
+            <a href="05-database-administration.html" class="nav-link next">المحاضرة التالية →</a>
+        </div>
+    </main>
+
+    <footer class="main-footer">
+        <div class="container">
+            <p>&copy; 2024 دورة PostgreSQL و PostGIS - م. ياسر المفعلاني</p>
+        </div>
+    </footer>
+
+    <script src="../../scripts/main.js"></script>
+</body>
+</html>
+

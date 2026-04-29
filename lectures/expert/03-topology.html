@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>المحاضرة 03: الطوبولوجيا - دورة PostgreSQL و PostGIS</title>
+    <link rel="stylesheet" href="../../styles/main.css">
+</head>
+<body>
+    <header class="main-header">
+        <div class="container">
+            <h1>دورة PostgreSQL و PostGIS الشاملة</h1>
+            <p class="instructor">مقدم الدورة: <strong>م. ياسر المفعلاني</strong></p>
+        </div>
+    </header>
+
+    <main class="lecture-content">
+        <div class="lecture-header">
+            <h1>المحاضرة 03: الطوبولوجيا</h1>
+            <div class="lecture-meta">
+                <span>المستوى: الخبير</span>
+                <span>المدة: 120 دقيقة</span>
+            </div>
+        </div>
+
+        <div class="lecture-body">
+            <a href="../../index.html" class="back-to-index">← العودة إلى الفهرس</a>
+
+            <h2>مقدمة في الطوبولوجيا</h2>
+            <p>
+                الطوبولوجيا (Topology) هي دراسة العلاقات المكانية بين الميزات الجغرافية. 
+                في PostGIS، تسمح الطوبولوجيا بإدارة البيانات الجغرافية مع الحفاظ على 
+                العلاقات المكانية بشكل صريح، مما يحسن من دقة البيانات ويسهل التحليل المعقد.
+            </p>
+
+            <div class="definition-list">
+                <dt>الطوبولوجيا:</dt>
+                <dd>دراسة العلاقات المكانية بين الميزات الجغرافية</dd>
+                
+                <dt>Node (عقدة):</dt>
+                <dd>نقطة في الطوبولوجيا تمثل تقاطع أو نهاية خط</dd>
+                
+                <dt>Edge (حافة):</dt>
+                <dd>خط يربط بين عقدتين</dd>
+                
+                <dt>Face (وجه):</dt>
+                <dd>منطقة محاطة بحواف</dd>
+            </div>
+
+            <h2>تثبيت PostGIS Topology</h2>
+            <div class="code-block">
+                <div class="code-title">تثبيت الامتداد</div>
+                <pre><code>-- تثبيت PostGIS Topology
+CREATE EXTENSION postgis_topology;
+
+-- التحقق من التثبيت
+SELECT * FROM pg_extension WHERE extname = 'postgis_topology';
+
+-- عرض الدوال المتاحة
+SELECT routine_name 
+FROM information_schema.routines 
+WHERE routine_schema = 'topology'
+ORDER BY routine_name;</code></pre>
+            </div>
+
+            <h2>إنشاء طوبولوجيا</h2>
+            <div class="code-block">
+                <div class="code-title">إنشاء طوبولوجيا جديدة</div>
+                <pre><code>-- إنشاء طوبولوجيا بسيطة
+SELECT topology.CreateTopology('road_topology', 4326);
+
+-- إنشاء طوبولوجيا مع خيارات
+SELECT topology.CreateTopology(
+    'road_topology',  -- اسم الطوبولوجيا
+    4326,             -- SRID
+    0.0001,           -- tolerance
+    false             -- hasZ
+);
+
+-- عرض الطوبولوجيات المتاحة
+SELECT * FROM topology.topology;</code></pre>
+            </div>
+
+            <h2>إضافة طبقات إلى الطوبولوجيا</h2>
+            <div class="code-block">
+                <div class="code-title">إنشاء طبقة طوبولوجية</div>
+                <pre><code>-- إنشاء طبقة للطرق
+SELECT topology.AddTopoGeometryColumn(
+    'road_topology',      -- اسم الطوبولوجيا
+    'public',             -- schema
+    'roads',              -- جدول
+    'topo_geom',          -- اسم العمود
+    'LINESTRING'          -- نوع الهندسة
+);
+
+-- إنشاء طبقة للمناطق
+SELECT topology.AddTopoGeometryColumn(
+    'road_topology',
+    'public',
+    'regions',
+    'topo_geom',
+    'POLYGON'
+);</code></pre>
+            </div>
+
+            <h2>تحويل البيانات إلى طوبولوجيا</h2>
+            <div class="code-block">
+                <div class="code-title">تحويل البيانات</div>
+                <pre><code>-- تحويل خط إلى طوبولوجيا
+UPDATE roads 
+SET topo_geom = topology.toTopoGeom(
+    geometry,
+    'road_topology',
+    1  -- layer_id
+)
+WHERE id = 1;
+
+-- تحويل جميع الخطوط
+UPDATE roads 
+SET topo_geom = topology.toTopoGeom(
+    geometry,
+    'road_topology',
+    1
+);
+
+-- تحويل مضلع
+UPDATE regions 
+SET topo_geom = topology.toTopoGeom(
+    boundary,
+    'road_topology',
+    2  -- layer_id للمناطق
+);</code></pre>
+            </div>
+
+            <h2>الاستعلامات الطوبولوجية</h2>
+            <h3>العقد (Nodes)</h3>
+            <div class="code-block">
+                <div class="code-title">العمل مع العقد</div>
+                <pre><code>-- عرض جميع العقد
+SELECT * FROM topology.node;
+
+-- العثور على العقد في منطقة معينة
+SELECT 
+    node_id,
+    ST_AsText(geom) AS location
+FROM topology.node
+WHERE topology_id = (
+    SELECT id FROM topology.topology WHERE name = 'road_topology'
+)
+AND ST_Within(
+    geom,
+    (SELECT boundary FROM regions WHERE name = 'منطقة الرياض')
+);</code></pre>
+            </div>
+
+            <h3>الحواف (Edges)</h3>
+            <div class="code-block">
+                <div class="code-title">العمل مع الحواف</div>
+                <pre><code>-- عرض جميع الحواف
+SELECT 
+    edge_id,
+    start_node,
+    end_node,
+    left_face,
+    right_face,
+    ST_AsText(geom) AS geometry
+FROM topology.edge
+WHERE topology_id = (
+    SELECT id FROM topology.topology WHERE name = 'road_topology'
+);
+
+-- العثور على الحواف المتصلة بعقدة
+SELECT 
+    e.edge_id,
+    e.start_node,
+    e.end_node
+FROM topology.edge e
+WHERE e.topology_id = (
+    SELECT id FROM topology.topology WHERE name = 'road_topology'
+)
+AND (e.start_node = 1 OR e.end_node = 1);</code></pre>
+            </div>
+
+            <h3>الأوجه (Faces)</h3>
+            <div class="code-block">
+                <div class="code-title">العمل مع الأوجه</div>
+                <pre><code>-- عرض جميع الأوجه
+SELECT 
+    face_id,
+    ST_AsText(mbr) AS bounding_box
+FROM topology.face
+WHERE topology_id = (
+    SELECT id FROM topology.topology WHERE name = 'road_topology'
+);
+
+-- حساب مساحة الوجه
+SELECT 
+    f.face_id,
+    ST_Area(ST_Transform(f.mbr, 3857)) / 1000000 AS area_sqkm
+FROM topology.face f
+WHERE f.topology_id = (
+    SELECT id FROM topology.topology WHERE name = 'road_topology'
+)
+AND f.face_id > 0;  -- استبعاد الوجه الخارجي</code></pre>
+            </div>
+
+            <h2>العلاقات الطوبولوجية</h2>
+            <div class="code-block">
+                <div class="code-title">التحقق من العلاقات</div>
+                <pre><code>-- التحقق من الاتصال
+SELECT topology.ValidateTopology('road_topology');
+
+-- إصلاح الأخطاء الطوبولوجية
+SELECT topology.ST_GetFaceEdges(
+    'road_topology',
+    face_id
+) FROM topology.face
+WHERE topology_id = (
+    SELECT id FROM topology.topology WHERE name = 'road_topology'
+);
+
+-- العثور على الحواف المشتركة
+SELECT 
+    e1.edge_id AS edge1,
+    e2.edge_id AS edge2,
+    e1.start_node AS common_node
+FROM topology.edge e1, topology.edge e2
+WHERE e1.topology_id = e2.topology_id
+  AND e1.edge_id < e2.edge_id
+  AND (e1.start_node = e2.start_node 
+       OR e1.start_node = e2.end_node
+       OR e1.end_node = e2.start_node
+       OR e1.end_node = e2.end_node);</code></pre>
+            </div>
+
+            <h2>التحليل الطوبولوجي المتقدم</h2>
+            <div class="code-block">
+                <div class="code-title">تحليل الشبكة الطوبولوجية</div>
+                <pre><code>-- العثور على نقاط التقاطع
+CREATE TABLE intersections AS
+SELECT 
+    n.node_id,
+    n.geom AS location,
+    COUNT(e.edge_id) AS edge_count
+FROM topology.node n
+JOIN topology.edge e ON (
+    e.start_node = n.node_id OR e.end_node = n.node_id
+)
+WHERE n.topology_id = (
+    SELECT id FROM topology.topology WHERE name = 'road_topology'
+)
+GROUP BY n.node_id, n.geom
+HAVING COUNT(e.edge_id) > 2;  -- أكثر من حافتين = تقاطع
+
+-- تحليل الاتصال
+WITH RECURSIVE connected_edges AS (
+    -- البداية: حافة معينة
+    SELECT edge_id, start_node, end_node, 1 AS level
+    FROM topology.edge
+    WHERE topology_id = (
+        SELECT id FROM topology.topology WHERE name = 'road_topology'
+    )
+    AND edge_id = 1
+    
+    UNION ALL
+    
+    -- الحواف المتصلة
+    SELECT e.edge_id, e.start_node, e.end_node, ce.level + 1
+    FROM topology.edge e
+    JOIN connected_edges ce ON (
+        e.start_node = ce.end_node OR 
+        e.end_node = ce.start_node OR
+        e.start_node = ce.start_node OR
+        e.end_node = ce.end_node
+    )
+    WHERE e.edge_id != ce.edge_id
+      AND ce.level < 10  -- حد أقصى للعمق
+)
+SELECT DISTINCT edge_id FROM connected_edges;</code></pre>
+            </div>
+
+            <h2>مثال شامل: نظام طوبولوجي للطرق</h2>
+            <div class="code-block">
+                <div class="code-title">نظام طوبولوجي متكامل</div>
+                <pre><code>-- إنشاء طوبولوجيا للطرق
+SELECT topology.CreateTopology('road_network', 4326);
+
+-- إضافة طبقة
+SELECT topology.AddTopoGeometryColumn(
+    'road_network',
+    'public',
+    'roads',
+    'topo_geom',
+    'LINESTRING'
+);
+
+-- تحويل البيانات
+UPDATE roads 
+SET topo_geom = topology.toTopoGeom(
+    geometry,
+    'road_network',
+    1
+);
+
+-- التحقق من الطوبولوجيا
+SELECT * FROM topology.ValidateTopology('road_network');
+
+-- تحليل الشبكة
+CREATE TABLE network_analysis AS
+SELECT 
+    n.node_id,
+    n.geom AS location,
+    COUNT(DISTINCT e.edge_id) AS connected_edges,
+    CASE 
+        WHEN COUNT(DISTINCT e.edge_id) = 1 THEN 'نهاية'
+        WHEN COUNT(DISTINCT e.edge_id) = 2 THEN 'عابر'
+        ELSE 'تقاطع'
+    END AS node_type
+FROM topology.node n
+LEFT JOIN topology.edge e ON (
+    e.start_node = n.node_id OR e.end_node = n.node_id
+)
+WHERE n.topology_id = (
+    SELECT id FROM topology.topology WHERE name = 'road_network'
+)
+GROUP BY n.node_id, n.geom;
+
+-- إحصائيات الشبكة
+SELECT 
+    COUNT(DISTINCT node_id) AS total_nodes,
+    COUNT(DISTINCT edge_id) AS total_edges,
+    COUNT(DISTINCT face_id) AS total_faces
+FROM (
+    SELECT node_id FROM topology.node 
+    WHERE topology_id = (SELECT id FROM topology.topology WHERE name = 'road_network')
+    UNION
+    SELECT edge_id FROM topology.edge 
+    WHERE topology_id = (SELECT id FROM topology.topology WHERE name = 'road_network')
+    UNION
+    SELECT face_id FROM topology.face 
+    WHERE topology_id = (SELECT id FROM topology.topology WHERE name = 'road_network')
+) AS network_elements;</code></pre>
+            </div>
+
+            <h2>التحليل الطوبولوجي المتقدم</h2>
+            <h3>تحليل الشبكات المعقدة</h3>
+            <div class="code-block">
+                <div class="code-title">تحليل الشبكة الطوبولوجية</div>
+                <pre><code>-- العثور على أقصر مسار (Shortest Path)
+CREATE OR REPLACE FUNCTION shortest_path_topology(
+    start_node_id INTEGER,
+    end_node_id INTEGER,
+    topology_name TEXT
+)
+RETURNS TABLE(
+    edge_id INTEGER,
+    sequence INTEGER
+) AS $$
+DECLARE
+    topo_id INTEGER;
+BEGIN
+    SELECT id INTO topo_id 
+    FROM topology.topology 
+    WHERE name = topology_name;
+    
+    -- استخدام Dijkstra algorithm مبسط
+    RETURN QUERY
+    WITH RECURSIVE path AS (
+        SELECT 
+            e.edge_id,
+            1 AS sequence,
+            e.start_node,
+            e.end_node,
+            ARRAY[e.edge_id] AS visited_edges
+        FROM topology.edge e
+        WHERE e.topology_id = topo_id
+          AND (e.start_node = start_node_id OR e.end_node = start_node_id)
+        
+        UNION ALL
+        
+        SELECT 
+            e.edge_id,
+            p.sequence + 1,
+            CASE WHEN e.start_node = p.end_node THEN e.end_node ELSE e.start_node END,
+            p.visited_edges || e.edge_id
+        FROM topology.edge e
+        JOIN path p ON (
+            e.start_node = p.end_node OR e.end_node = p.end_node
+        )
+        WHERE e.edge_id != ALL(p.visited_edges)
+          AND p.sequence < 100  -- حد أقصى
+          AND (p.end_node != end_node_id)
+    )
+    SELECT edge_id, sequence
+    FROM path
+    WHERE end_node = end_node_id
+    ORDER BY sequence
+    LIMIT 1;
+END;
+$$ LANGUAGE plpgsql;
+
+-- استخدام الدالة
+SELECT * FROM shortest_path_topology(1, 10, 'road_network');</code></pre>
+            </div>
+
+            <h3>تحليل الاتصال (Connectivity Analysis)</h3>
+            <div class="code-block">
+                <div class="code-title">تحليل المكونات المتصلة</div>
+                <pre><code>-- العثور على جميع المكونات المتصلة
+CREATE OR REPLACE FUNCTION find_connected_components(
+    topology_name TEXT
+)
+RETURNS TABLE(
+    component_id INTEGER,
+    node_id INTEGER,
+    edge_id INTEGER
+) AS $$
+DECLARE
+    topo_id INTEGER;
+    comp_id INTEGER := 1;
+    node_rec RECORD;
+BEGIN
+    SELECT id INTO topo_id 
+    FROM topology.topology 
+    WHERE name = topology_name;
+    
+    -- خوارزمية Union-Find مبسطة
+    FOR node_rec IN 
+        SELECT node_id FROM topology.node 
+        WHERE topology_id = topo_id
+    LOOP
+        -- هنا يمكن تطبيق خوارزمية Union-Find
+        -- للبساطة، نرجع كل عقدة كمكون منفصل
+        RETURN QUERY
+        SELECT 
+            comp_id,
+            node_rec.node_id,
+            e.edge_id
+        FROM topology.edge e
+        WHERE e.topology_id = topo_id
+          AND (e.start_node = node_rec.node_id OR e.end_node = node_rec.node_id);
+        
+        comp_id := comp_id + 1;
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql;</code></pre>
+            </div>
+
+            <h2>الربط مع برامج GIS للطوبولوجيا</h2>
+            <h3>استخدام QGIS مع الطوبولوجيا</h3>
+            <div class="code-block">
+                <div class="code-title">عرض الطوبولوجيا في QGIS</div>
+                <pre><code>-- إنشاء Views للعرض في QGIS
+CREATE VIEW topology_nodes_qgis AS
+SELECT 
+    node_id AS id,
+    geom AS geometry,
+    'node' AS feature_type
+FROM topology.node
+WHERE topology_id = (
+    SELECT id FROM topology.topology WHERE name = 'road_network'
+);
+
+CREATE VIEW topology_edges_qgis AS
+SELECT 
+    edge_id AS id,
+    geom AS geometry,
+    start_node,
+    end_node,
+    'edge' AS feature_type
+FROM topology.edge
+WHERE topology_id = (
+    SELECT id FROM topology.topology WHERE name = 'road_network'
+);
+
+-- في QGIS:
+-- 1. Add PostGIS Layer
+-- 2. اختر Views: topology_nodes_qgis و topology_edges_qgis
+-- 3. يمكنك تحرير البيانات والتحقق من الطوبولوجيا
+
+-- تصدير نتائج التحليل الطوبولوجي
+CREATE VIEW network_analysis_qgis AS
+SELECT 
+    n.node_id AS id,
+    n.geom AS geometry,
+    COUNT(DISTINCT e.edge_id) AS degree,
+    CASE 
+        WHEN COUNT(DISTINCT e.edge_id) = 1 THEN 'end'
+        WHEN COUNT(DISTINCT e.edge_id) = 2 THEN 'through'
+        ELSE 'junction'
+    END AS node_type
+FROM topology.node n
+LEFT JOIN topology.edge e ON (
+    e.start_node = n.node_id OR e.end_node = n.node_id
+)
+WHERE n.topology_id = (
+    SELECT id FROM topology.topology WHERE name = 'road_network'
+)
+GROUP BY n.node_id, n.geom;</code></pre>
+            </div>
+
+            <h3>استخدام ArcGIS مع الطوبولوجيا</h3>
+            <div class="code-block">
+                <div class="code-title">الطوبولوجيا في ArcGIS</div>
+                <pre><code>-- إنشاء Feature Classes متوافقة مع ArcGIS
+CREATE TABLE arcgis_topology_nodes (
+    objectid SERIAL PRIMARY KEY,
+    shape GEOMETRY(POINT, 4326),
+    node_id INTEGER,
+    degree INTEGER
+);
+
+-- ملء البيانات
+INSERT INTO arcgis_topology_nodes (shape, node_id, degree)
+SELECT 
+    geom,
+    node_id,
+    COUNT(DISTINCT e.edge_id)
+FROM topology.node n
+LEFT JOIN topology.edge e ON (
+    e.start_node = n.node_id OR e.end_node = n.node_id
+)
+WHERE n.topology_id = (
+    SELECT id FROM topology.topology WHERE name = 'road_network'
+)
+GROUP BY n.node_id, n.geom;
+
+-- في ArcGIS:
+-- 1. يمكنك استخدام Network Analyst للتحليل
+-- 2. أو استخدام Topology tools للتحقق من الطوبولوجيا
+-- 3. يمكن تصدير النتائج مرة أخرى إلى PostGIS</code></pre>
+            </div>
+
+            <h2>الخلاصة</h2>
+            <p>في هذه المحاضرة تعلمنا:</p>
+            <ul>
+                <li>مقدمة في الطوبولوجيا ومفاهيمها الأساسية</li>
+                <li>تثبيت وإعداد PostGIS Topology</li>
+                <li>إنشاء طوبولوجيات جديدة</li>
+                <li>إضافة طبقات وتحويل البيانات</li>
+                <li>العمل مع العقد والحواف والأوجه</li>
+                <li>التحقق من العلاقات الطوبولوجية</li>
+                <li>التحليل الطوبولوجي المتقدم (أقصر مسار، الاتصال)</li>
+                <li>تحليل المكونات المتصلة</li>
+                <li>الربط مع QGIS و ArcGIS للطوبولوجيا</li>
+                <li>بناء أنظمة طوبولوجية متكاملة</li>
+            </ul>
+
+            <p>في المحاضرة القادمة سنتعلم الهندسة ثلاثية الأبعاد.</p>
+        </div>
+
+        <div class="navigation">
+            <a href="02-raster-data.html" class="nav-link prev">← المحاضرة السابقة</a>
+            <a href="04-3d-geometry.html" class="nav-link next">المحاضرة التالية →</a>
+        </div>
+    </main>
+
+    <footer class="main-footer">
+        <div class="container">
+            <p>&copy; 2024 دورة PostgreSQL و PostGIS - م. ياسر المفعلاني</p>
+        </div>
+    </footer>
+
+    <script src="../../scripts/main.js"></script>
+</body>
+</html>
+

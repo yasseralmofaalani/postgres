@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>المحاضرة 07: الأمان وأفضل الممارسات - دورة PostgreSQL و PostGIS</title>
+    <link rel="stylesheet" href="../../styles/main.css">
+</head>
+<body>
+    <header class="main-header">
+        <div class="container">
+            <h1>دورة PostgreSQL و PostGIS الشاملة</h1>
+            <p class="instructor">مقدم الدورة: <strong>م. ياسر المفعلاني</strong></p>
+        </div>
+    </header>
+
+    <main class="lecture-content">
+        <div class="lecture-header">
+            <h1>المحاضرة 07: الأمان وأفضل الممارسات</h1>
+            <div class="lecture-meta">
+                <span>المستوى: الخبير</span>
+                <span>المدة: 90 دقيقة</span>
+            </div>
+        </div>
+
+        <div class="lecture-body">
+            <a href="../../index.html" class="back-to-index">← العودة إلى الفهرس</a>
+
+            <h2>مقدمة</h2>
+            <p>
+                الأمان في قواعد البيانات الجغرافية أمر بالغ الأهمية. في هذه المحاضرة سنتعلم 
+                أفضل الممارسات لتأمين PostgreSQL و PostGIS، إدارة الصلاحيات، التشفير، والمراقبة.
+            </p>
+
+            <h2>أمان المصادقة</h2>
+            <h3>إدارة كلمات المرور</h3>
+            <div class="code-block">
+                <div class="code-title">سياسات كلمات المرور</div>
+                <pre><code>-- تثبيت pgcrypto للتشفير
+CREATE EXTENSION pgcrypto;
+
+-- تشفير كلمة المرور
+SELECT crypt('my_password', gen_salt('bf', 10));
+
+-- إنشاء مستخدم بكلمة مرور مشفرة
+CREATE USER gis_user WITH 
+    PASSWORD 'secure_password_123!'
+    VALID UNTIL '2025-12-31';
+
+-- تغيير كلمة المرور
+ALTER USER gis_user WITH PASSWORD 'new_secure_password';
+
+-- تعيين انتهاء صلاحية
+ALTER USER gis_user VALID UNTIL '2025-12-31';
+
+-- تعطيل مستخدم
+ALTER USER gis_user WITH NOLOGIN;
+
+-- تفعيل مستخدم
+ALTER USER gis_user WITH LOGIN;</code></pre>
+            </div>
+
+            <h3>إعدادات المصادقة</h3>
+            <div class="code-block">
+                <div class="code-title">تكوين pg_hba.conf</div>
+                <pre><code># مثال على إعدادات آمنة في pg_hba.conf
+
+# الاتصال المحلي - peer authentication
+local   all             all                                     peer
+
+# الاتصال من localhost - md5
+host    all             all             127.0.0.1/32            md5
+
+# الاتصال من شبكة محلية - md5
+host    all             all             192.168.1.0/24          md5
+
+# اتصال SSL فقط
+hostssl all             all             0.0.0.0/0               md5
+
+# رفض الاتصالات من IP محدد
+host    all             all             10.0.0.50/32            reject
+
+# طرق المصادقة:
+# trust: بدون مصادقة
+# md5: كلمة مرور مشفرة
+# scram-sha-256: تشفير قوي
+# cert: شهادات SSL
+# peer: استخدام نظام التشغيل</code></pre>
+            </div>
+
+            <h2>إدارة الصلاحيات المتقدمة</h2>
+            <h3>الأدوار (Roles)</h3>
+            <div class="code-block">
+                <div class="code-title">إنشاء وإدارة الأدوار</div>
+                <pre><code>-- إنشاء دور
+CREATE ROLE gis_readonly;
+
+-- منح صلاحيات للدور
+GRANT CONNECT ON DATABASE gis_db TO gis_readonly;
+GRANT USAGE ON SCHEMA public TO gis_readonly;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO gis_readonly;
+
+-- إنشاء دور للكتابة
+CREATE ROLE gis_writer;
+GRANT CONNECT ON DATABASE gis_db TO gis_writer;
+GRANT USAGE ON SCHEMA public TO gis_writer;
+GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO gis_writer;
+
+-- إنشاء دور للإدارة
+CREATE ROLE gis_admin;
+GRANT ALL PRIVILEGES ON DATABASE gis_db TO gis_admin;
+
+-- تعيين دور لمستخدم
+GRANT gis_readonly TO gis_user;
+
+-- إزالة دور
+REVOKE gis_readonly FROM gis_user;</code></pre>
+            </div>
+
+            <h3>Row Level Security (RLS)</h3>
+            <div class="code-block">
+                <div class="code-title">أمان على مستوى الصف</div>
+                <pre><code>-- تفعيل RLS
+ALTER TABLE cities ENABLE ROW LEVEL SECURITY;
+
+-- سياسة للقراءة فقط
+CREATE POLICY cities_select_policy ON cities
+    FOR SELECT
+    TO gis_readonly
+    USING (true);
+
+-- سياسة للكتابة
+CREATE POLICY cities_insert_policy ON cities
+    FOR INSERT
+    TO gis_writer
+    WITH CHECK (true);
+
+-- سياسة مبنية على المستخدم
+CREATE POLICY cities_user_policy ON cities
+    FOR ALL
+    TO gis_user
+    USING (created_by = current_user);
+
+-- عرض السياسات
+SELECT * FROM pg_policies WHERE tablename = 'cities';</code></pre>
+            </div>
+
+            <h2>التشفير</h2>
+            <h3>تشفير الاتصالات (SSL)</h3>
+            <div class="code-block">
+                <div class="code-title">إعداد SSL</div>
+                <pre><code># في postgresql.conf:
+ssl = on
+ssl_cert_file = 'server.crt'
+ssl_key_file = 'server.key'
+ssl_ca_file = 'ca.crt'
+
+# التحقق من SSL
+SELECT ssl_is_used();
+
+# إجبار SSL في pg_hba.conf
+hostssl all all 0.0.0.0/0 md5</code></pre>
+            </div>
+
+            <h3>تشفير البيانات</h3>
+            <div class="code-block">
+                <div class="code-title">تشفير الأعمدة</div>
+                <pre><code>-- تثبيت pgcrypto
+CREATE EXTENSION pgcrypto;
+
+-- تشفير بيانات حساسة
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(100),
+    password_encrypted BYTEA
+);
+
+-- إدراج بيانات مشفرة
+INSERT INTO users (username, password_encrypted) VALUES
+    ('user1', crypt('password123', gen_salt('bf')));
+
+-- التحقق من كلمة المرور
+SELECT username 
+FROM users 
+WHERE password_encrypted = crypt('password123', password_encrypted);</code></pre>
+            </div>
+
+            <h2>المراقبة والتدقيق</h2>
+            <h3>تفعيل التدقيق (Auditing)</h3>
+            <div class="code-block">
+                <div class="code-title">تسجيل العمليات</div>
+                <pre><code># في postgresql.conf:
+logging_collector = on
+log_directory = 'log'
+log_filename = 'postgresql-%Y-%m-%d.log'
+log_statement = 'all'  # أو 'ddl', 'mod', 'all'
+log_connections = on
+log_disconnections = on
+log_duration = on
+log_line_prefix = '%t [%p]: [%l-1] user=%u,db=%d,app=%a,client=%h '
+
+# إعادة تحميل التكوين
+SELECT pg_reload_conf();
+
+# عرض السجلات
+SELECT * FROM pg_stat_statements
+ORDER BY total_time DESC
+LIMIT 10;</code></pre>
+            </div>
+
+            <h3>مراقبة الوصول</h3>
+            <div class="code-block">
+                <div class="code-title">مراقبة الجلسات</div>
+                <pre><code>-- عرض الجلسات النشطة
+SELECT 
+    pid,
+    usename,
+    application_name,
+    client_addr,
+    state,
+    query_start,
+    query
+FROM pg_stat_activity
+WHERE state != 'idle'
+ORDER BY query_start;
+
+-- إنهاء جلسات مشبوهة
+SELECT pg_terminate_backend(pid)
+FROM pg_stat_activity
+WHERE client_addr = '10.0.0.50'
+  AND state != 'idle';
+
+-- مراقبة محاولات الاتصال الفاشلة
+SELECT 
+    event_time,
+    error_severity,
+    message
+FROM pg_stat_statements
+WHERE message LIKE '%authentication%'
+ORDER BY event_time DESC;</code></pre>
+            </div>
+
+            <h2>أفضل الممارسات</h2>
+            <h3>الأمان على مستوى النظام</h3>
+            <ul>
+                <li><strong>تحديثات الأمان:</strong> حافظ على تحديث PostgreSQL و PostGIS</li>
+                <li><strong>كلمات المرور:</strong> استخدم كلمات مرور قوية ومعقدة</li>
+                <li><strong>الصلاحيات:</strong> مبدأ أقل صلاحيات (Principle of Least Privilege)</li>
+                <li><strong>الشبكة:</strong> استخدم جدران الحماية و VPN</li>
+                <li><strong>النسخ الاحتياطي:</strong> احتفظ بنسخ احتياطية مشفرة</li>
+            </ul>
+
+            <h3>الأمان على مستوى قاعدة البيانات</h3>
+            <div class="code-block">
+                <div class="code-title">قائمة فحص الأمان</div>
+                <pre><code>-- 1. التحقق من المستخدمين بدون كلمات مرور
+SELECT usename FROM pg_user WHERE passwd IS NULL;
+
+-- 2. التحقق من الصلاحيات المفرطة
+SELECT 
+    grantee,
+    table_schema,
+    table_name,
+    privilege_type
+FROM information_schema.role_table_grants
+WHERE grantee IN (SELECT rolname FROM pg_roles WHERE rolsuper = true);
+
+-- 3. التحقق من الاتصالات غير المشفرة
+SELECT 
+    client_addr,
+    usename,
+    application_name
+FROM pg_stat_activity
+WHERE ssl = false
+  AND client_addr IS NOT NULL;
+
+-- 4. التحقق من الجداول بدون RLS
+SELECT 
+    schemaname,
+    tablename
+FROM pg_tables
+WHERE schemaname = 'public'
+  AND tablename NOT IN (
+      SELECT tablename FROM pg_policies
+  );</code></pre>
+            </div>
+
+            <h2>الخلاصة</h2>
+            <p>في هذه المحاضرة تعلمنا:</p>
+            <ul>
+                <li>أمان المصادقة وإدارة كلمات المرور</li>
+                <li>تكوين pg_hba.conf</li>
+                <li>إدارة الأدوار والصلاحيات</li>
+                <li>Row Level Security (RLS)</li>
+                <li>التشفير (SSL وتشفير البيانات)</li>
+                <li>المراقبة والتدقيق</li>
+                <li>أفضل الممارسات للأمان</li>
+            </ul>
+
+            <p>في المحاضرة القادمة سنتعلم النشر في بيئة الإنتاج.</p>
+        </div>
+
+        <div class="navigation">
+            <a href="06-backup-recovery.html" class="nav-link prev">← المحاضرة السابقة</a>
+            <a href="08-production-deployment.html" class="nav-link next">المحاضرة التالية →</a>
+        </div>
+    </main>
+
+    <footer class="main-footer">
+        <div class="container">
+            <p>&copy; 2024 دورة PostgreSQL و PostGIS - م. ياسر المفعلاني</p>
+        </div>
+    </footer>
+
+    <script src="../../scripts/main.js"></script>
+</body>
+</html>
+
