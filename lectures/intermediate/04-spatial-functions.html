@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>المحاضرة 04: الدوال المكانية المتقدمة - دورة PostgreSQL و PostGIS</title>
+    <link rel="stylesheet" href="../../styles/main.css">
+</head>
+<body>
+    <header class="main-header">
+        <div class="container">
+            <h1>دورة PostgreSQL و PostGIS الشاملة</h1>
+            <p class="instructor">مقدم الدورة: <strong>م. ياسر المفعلاني</strong></p>
+        </div>
+    </header>
+
+    <main class="lecture-content">
+        <div class="lecture-header">
+            <h1>المحاضرة 04: الدوال المكانية المتقدمة</h1>
+            <div class="lecture-meta">
+                <span>المستوى: المتوسط</span>
+                <span>المدة: 90 دقيقة</span>
+            </div>
+        </div>
+
+        <div class="lecture-body">
+            <a href="../../index.html" class="back-to-index">← العودة إلى الفهرس</a>
+
+            <h2>دوال التحويل</h2>
+            <div class="code-block">
+                <div class="code-title">تحويل أنظمة الإحداثيات</div>
+                <pre><code>-- ST_Transform
+SELECT ST_Transform(location, 3857) FROM cities;
+
+-- ST_SetSRID
+SELECT ST_SetSRID(ST_MakePoint(46.6753, 24.7136), 4326);</code></pre>
+            </div>
+
+            <h2>دوال التحليل</h2>
+            <div class="code-block">
+                <div class="code-title">دوال التحليل</div>
+                <pre><code>-- ST_Simplify
+SELECT ST_Simplify(geometry, 0.001) FROM roads;
+
+-- ST_ConvexHull
+SELECT ST_ConvexHull(ST_Collect(location)) FROM cities;
+
+-- ST_DelaunayTriangles
+SELECT ST_DelaunayTriangles(ST_Collect(location)) FROM cities;</code></pre>
+            </div>
+
+            <h2>دوال القياس المتقدمة</h2>
+            <div class="code-block">
+                <div class="code-title">قياسات متقدمة</div>
+                <pre><code>-- ST_HausdorffDistance
+SELECT ST_HausdorffDistance(geom1, geom2) FROM ...;
+
+-- ST_FrechetDistance
+SELECT ST_FrechetDistance(geom1, geom2) FROM ...;</code></pre>
+            </div>
+
+            <h2>الخلاصة</h2>
+            <p>تعلمنا الدوال المكانية المتقدمة في PostGIS.</p>
+        </div>
+
+        <div class="navigation">
+            <a href="03-spatial-indexes.html" class="nav-link prev">← المحاضرة السابقة</a>
+            <a href="05-joins-subqueries.html" class="nav-link next">المحاضرة التالية →</a>
+        </div>
+    </main>
+
+    <footer class="main-footer">
+        <div class="container">
+            <p>&copy; 2024 دورة PostgreSQL و PostGIS - م. ياسر المفعلاني</p>
+        </div>
+    </footer>
+
+    <script src="../../scripts/main.js"></script>
+</body>
+</html>
+

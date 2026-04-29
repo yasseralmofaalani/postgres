@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>المحاضرة 07: تحسين الأداء - دورة PostgreSQL و PostGIS</title>
+    <link rel="stylesheet" href="../../styles/main.css">
+</head>
+<body>
+    <header class="main-header">
+        <div class="container">
+            <h1>دورة PostgreSQL و PostGIS الشاملة</h1>
+            <p class="instructor">مقدم الدورة: <strong>م. ياسر المفعلاني</strong></p>
+        </div>
+    </header>
+
+    <main class="lecture-content">
+        <div class="lecture-header">
+            <h1>المحاضرة 07: تحسين الأداء</h1>
+            <div class="lecture-meta">
+                <span>المستوى: المتوسط</span>
+                <span>المدة: 90 دقيقة</span>
+            </div>
+        </div>
+
+        <div class="lecture-body">
+            <a href="../../index.html" class="back-to-index">← العودة إلى الفهرس</a>
+
+            <h2>تحليل الاستعلامات</h2>
+            <div class="code-block">
+                <div class="code-title">EXPLAIN و EXPLAIN ANALYZE</div>
+                <pre><code>-- تحليل خطة التنفيذ
+EXPLAIN SELECT * FROM cities WHERE ST_Within(location, 
+    (SELECT boundary FROM regions WHERE name = 'منطقة الرياض'));
+
+-- تحليل مع إحصائيات التنفيذ
+EXPLAIN ANALYZE SELECT * FROM cities c, regions r
+WHERE ST_Within(c.location, r.boundary);</code></pre>
+            </div>
+
+            <h2>تحسين الاستعلامات</h2>
+            <ul>
+                <li>استخدم الفهارس المكانية</li>
+                <li>استخدم ST_DWithin بدلاً من ST_Distance</li>
+                <li>حول الإحداثيات فقط عند الحاجة</li>
+                <li>استخدم VACUUM ANALYZE بانتظام</li>
+            </ul>
+
+            <h2>الخلاصة</h2>
+            <p>تعلمنا تقنيات تحسين الأداء.</p>
+        </div>
+
+        <div class="navigation">
+            <a href="06-views-functions.html" class="nav-link prev">← المحاضرة السابقة</a>
+            <a href="../../index.html" class="nav-link next">العودة إلى الفهرس →</a>
+        </div>
+    </main>
+
+    <footer class="main-footer">
+        <div class="container">
+            <p>&copy; 2024 دورة PostgreSQL و PostGIS - م. ياسر المفعلاني</p>
+        </div>
+    </footer>
+
+    <script src="../../scripts/main.js"></script>
+</body>
+</html>
+

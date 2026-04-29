@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>المحاضرة 02: العلاقات المكانية - دورة PostgreSQL و PostGIS</title>
+    <link rel="stylesheet" href="../../styles/main.css">
+</head>
+<body>
+    <header class="main-header">
+        <div class="container">
+            <h1>دورة PostgreSQL و PostGIS الشاملة</h1>
+            <p class="instructor">مقدم الدورة: <strong>م. ياسر المفعلاني</strong></p>
+        </div>
+    </header>
+
+    <main class="lecture-content">
+        <div class="lecture-header">
+            <h1>المحاضرة 02: العلاقات المكانية</h1>
+            <div class="lecture-meta">
+                <span>المستوى: المتوسط</span>
+                <span>المدة: 90 دقيقة</span>
+            </div>
+        </div>
+
+        <div class="lecture-body">
+            <a href="../../index.html" class="back-to-index">← العودة إلى الفهرس</a>
+
+            <h2>مقدمة</h2>
+            <p>
+                العلاقات المكانية هي الأساس في تحليل البيانات الجغرافية. PostGIS يوفر 
+                مجموعة شاملة من الدوال للتحقق من العلاقات المكانية بين الميزات الجغرافية.
+            </p>
+
+            <h2>الدوال الأساسية للعلاقات المكانية</h2>
+            <h3>ST_Intersects - التقاطع</h3>
+            <div class="code-block">
+                <div class="code-title">التحقق من التقاطع</div>
+                <pre><code>-- الطرق التي تتقاطع مع منطقة معينة
+SELECT r.name, r.road_type
+FROM roads r, regions reg
+WHERE reg.name = 'منطقة الرياض'
+  AND ST_Intersects(r.geometry, reg.boundary);
+
+-- المناطق المتداخلة
+SELECT r1.name AS region1, r2.name AS region2
+FROM regions r1, regions r2
+WHERE ST_Intersects(r1.boundary, r2.boundary)
+  AND r1.id < r2.id;</code></pre>
+            </div>
+
+            <h3>ST_Contains - يحتوي</h3>
+            <div class="code-block">
+                <div class="code-title">التحقق من الاحتواء</div>
+                <pre><code>-- المدن داخل منطقة
+SELECT c.name
+FROM cities c, regions r
+WHERE r.name = 'منطقة الرياض'
+  AND ST_Contains(r.boundary, c.location);
+
+-- المناطق التي تحتوي على مناطق أخرى
+SELECT r1.name AS parent, r2.name AS child
+FROM regions r1, regions r2
+WHERE ST_Contains(r1.boundary, r2.boundary)
+  AND r1.id != r2.id;</code></pre>
+            </div>
+
+            <h3>ST_Within - داخل</h3>
+            <div class="code-block">
+                <div class="code-title">التحقق من الداخل</div>
+                <pre><code>-- نفس ST_Contains لكن بالعكس
+SELECT c.name
+FROM cities c, regions r
+WHERE r.name = 'منطقة الرياض'
+  AND ST_Within(c.location, r.boundary);</code></pre>
+            </div>
+
+            <h3>ST_Touches - التلامس</h3>
+            <div class="code-block">
+                <div class="code-title">التحقق من التلامس</div>
+                <pre><code>-- المناطق المتجاورة
+SELECT r1.name AS region1, r2.name AS region2
+FROM regions r1, regions r2
+WHERE ST_Touches(r1.boundary, r2.boundary)
+  AND r1.id < r2.id;</code></pre>
+            </div>
+
+            <h3>ST_Overlaps - التداخل</h3>
+            <div class="code-block">
+                <div class="code-title">التحقق من التداخل</div>
+                <pre><code>-- المناطق المتداخلة جزئياً
+SELECT r1.name AS region1, r2.name AS region2
+FROM regions r1, regions r2
+WHERE ST_Overlaps(r1.boundary, r2.boundary)
+  AND r1.id < r2.id;</code></pre>
+            </div>
+
+            <h3>ST_Crosses - التقاطع</h3>
+            <div class="code-block">
+                <div class="code-title">التحقق من التقاطع (للخطوط)</div>
+                <pre><code>-- الطرق المتقاطعة
+SELECT r1.name AS road1, r2.name AS road2
+FROM roads r1, roads r2
+WHERE ST_Crosses(r1.geometry, r2.geometry)
+  AND r1.id < r2.id;</code></pre>
+            </div>
+
+            <h3>ST_Disjoint - منفصل</h3>
+            <div class="code-block">
+                <div class="code-title">التحقق من الانفصال</div>
+                <pre><code>-- المناطق المنفصلة
+SELECT r1.name AS region1, r2.name AS region2
+FROM regions r1, regions r2
+WHERE ST_Disjoint(r1.boundary, r2.boundary)
+  AND r1.id < r2.id;</code></pre>
+            </div>
+
+            <h3>ST_Equals - التساوي</h3>
+            <div class="code-block">
+                <div class="code-title">التحقق من التساوي</div>
+                <pre><code>-- الميزات المتطابقة
+SELECT r1.name AS region1, r2.name AS region2
+FROM regions r1, regions r2
+WHERE ST_Equals(r1.boundary, r2.boundary)
+  AND r1.id < r2.id;</code></pre>
+            </div>
+
+            <h2>الدوال المتقدمة</h2>
+            <h3>ST_DWithin - ضمن مسافة</h3>
+            <div class="code-block">
+                <div class="code-title">البحث ضمن مسافة</div>
+                <pre><code>-- المدن ضمن 50 كيلومتر من الرياض
+SELECT c.name,
+    ST_Distance(
+        ST_Transform(riyadh.location, 3857),
+        ST_Transform(c.location, 3857)
+    ) / 1000 AS distance_km
+FROM cities c,
+     (SELECT location FROM cities WHERE name = 'الرياض') AS riyadh
+WHERE ST_DWithin(
+    ST_Transform(riyadh.location, 3857),
+    ST_Transform(c.location, 3857),
+    50000  -- 50 كيلومتر
+)
+AND c.name != 'الرياض';</code></pre>
+            </div>
+
+            <h3>ST_Relate - العلاقة التفصيلية</h3>
+            <div class="code-block">
+                <div class="code-title">العلاقة التفصيلية (DE-9IM)</div>
+                <pre><code>-- استخدام مصفوفة DE-9IM
+SELECT 
+    r1.name,
+    r2.name,
+    ST_Relate(r1.boundary, r2.boundary) AS relationship
+FROM regions r1, regions r2
+WHERE r1.id < r2.id
+LIMIT 10;</code></pre>
+            </div>
+
+            <h2>مصفوفة العلاقات المكانية</h2>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>الدالة</th>
+                            <th>الوصف</th>
+                            <th>مثال الاستخدام</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>ST_Intersects</td>
+                            <td>يتقاطع مع</td>
+                            <td>الطرق في منطقة</td>
+                        </tr>
+                        <tr>
+                            <td>ST_Contains</td>
+                            <td>يحتوي على</td>
+                            <td>منطقة تحتوي مدينة</td>
+                        </tr>
+                        <tr>
+                            <td>ST_Within</td>
+                            <td>داخل</td>
+                            <td>مدينة داخل منطقة</td>
+                        </tr>
+                        <tr>
+                            <td>ST_Touches</td>
+                            <td>يلمس</td>
+                            <td>مناطق متجاورة</td>
+                        </tr>
+                        <tr>
+                            <td>ST_Overlaps</td>
+                            <td>يتداخل</td>
+                            <td>مناطق متداخلة</td>
+                        </tr>
+                        <tr>
+                            <td>ST_Crosses</td>
+                            <td>يتقاطع</td>
+                            <td>طرق متقاطعة</td>
+                        </tr>
+                        <tr>
+                            <td>ST_Disjoint</td>
+                            <td>منفصل</td>
+                            <td>مناطق غير متجاورة</td>
+                        </tr>
+                        <tr>
+                            <td>ST_Equals</td>
+                            <td>متساوي</td>
+                            <td>ميزات متطابقة</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h2>مثال شامل</h2>
+            <div class="code-block">
+                <div class="code-title">تحليل العلاقات المكانية</div>
+                <pre><code>-- إنشاء جدول للعلاقات المكانية
+CREATE TABLE spatial_relationships AS
+SELECT 
+    r1.name AS region1,
+    r2.name AS region2,
+    CASE 
+        WHEN ST_Contains(r1.boundary, r2.boundary) THEN 'contains'
+        WHEN ST_Within(r1.boundary, r2.boundary) THEN 'within'
+        WHEN ST_Touches(r1.boundary, r2.boundary) THEN 'touches'
+        WHEN ST_Overlaps(r1.boundary, r2.boundary) THEN 'overlaps'
+        WHEN ST_Intersects(r1.boundary, r2.boundary) THEN 'intersects'
+        ELSE 'disjoint'
+    END AS relationship_type,
+    ST_Area(
+        ST_Transform(
+            ST_Intersection(r1.boundary, r2.boundary),
+            3857
+        )
+    ) / 1000000 AS intersection_area_sqkm
+FROM regions r1, regions r2
+WHERE r1.id < r2.id
+  AND ST_Intersects(r1.boundary, r2.boundary);</code></pre>
+            </div>
+
+            <h2>الخلاصة</h2>
+            <p>في هذه المحاضرة تعلمنا:</p>
+            <ul>
+                <li>الدوال الأساسية للعلاقات المكانية</li>
+                <li>الفرق بين ST_Contains و ST_Within</li>
+                <li>استخدام ST_DWithin للبحث ضمن مسافة</li>
+                <li>مصفوفة العلاقات المكانية</li>
+                <li>أمثلة عملية على التحليل</li>
+            </ul>
+
+            <p>في المحاضرة القادمة سنتعلم الفهارس المكانية لتحسين الأداء.</p>
+        </div>
+
+        <div class="navigation">
+            <a href="01-spatial-queries.html" class="nav-link prev">← المحاضرة السابقة: الاستعلامات الجغرافية الأساسية</a>
+            <a href="03-spatial-indexes.html" class="nav-link next">المحاضرة التالية: الفهارس المكانية →</a>
+        </div>
+    </main>
+
+    <footer class="main-footer">
+        <div class="container">
+            <p>&copy; 2024 دورة PostgreSQL و PostGIS - م. ياسر المفعلاني</p>
+        </div>
+    </footer>
+
+    <script src="../../scripts/main.js"></script>
+</body>
+</html>
+

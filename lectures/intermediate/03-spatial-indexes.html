@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>المحاضرة 03: الفهارس المكانية - دورة PostgreSQL و PostGIS</title>
+    <link rel="stylesheet" href="../../styles/main.css">
+</head>
+<body>
+    <header class="main-header">
+        <div class="container">
+            <h1>دورة PostgreSQL و PostGIS الشاملة</h1>
+            <p class="instructor">مقدم الدورة: <strong>م. ياسر المفعلاني</strong></p>
+        </div>
+    </header>
+
+    <main class="lecture-content">
+        <div class="lecture-header">
+            <h1>المحاضرة 03: الفهارس المكانية</h1>
+            <div class="lecture-meta">
+                <span>المستوى: المتوسط</span>
+                <span>المدة: 75 دقيقة</span>
+            </div>
+        </div>
+
+        <div class="lecture-body">
+            <a href="../../index.html" class="back-to-index">← العودة إلى الفهرس</a>
+
+            <h2>ما هي الفهارس المكانية؟</h2>
+            <p>
+                الفهارس المكانية (Spatial Indexes) هي هياكل بيانات خاصة تُستخدم لتسريع 
+                الاستعلامات الجغرافية. PostGIS يستخدم فهرس GIST (Generalized Search Tree) 
+                لتحسين أداء الاستعلامات المكانية.
+            </p>
+
+            <h2>إنشاء الفهارس المكانية</h2>
+            <div class="code-block">
+                <div class="code-title">إنشاء فهرس مكاني</div>
+                <pre><code>-- فهرس بسيط
+CREATE INDEX idx_cities_location ON cities USING GIST(location);
+
+-- فهرس مع خيارات
+CREATE INDEX idx_regions_boundary ON regions 
+USING GIST(boundary) 
+WITH (fillfactor = 90);
+
+-- فهرس على عدة أعمدة
+CREATE INDEX idx_roads_geom_type ON roads 
+USING GIST(geometry, road_type);</code></pre>
+            </div>
+
+            <h2>التحقق من الفهارس</h2>
+            <div class="code-block">
+                <div class="code-title">عرض الفهارس</div>
+                <pre><code>-- عرض جميع الفهارس
+SELECT 
+    tablename,
+    indexname,
+    indexdef
+FROM pg_indexes
+WHERE tablename = 'cities';
+
+-- عرض معلومات الفهارس
+SELECT 
+    schemaname,
+    tablename,
+    indexname,
+    indexdef
+FROM pg_indexes
+WHERE indexdef LIKE '%GIST%';</code></pre>
+            </div>
+
+            <h2>استخدام الفهارس في الاستعلامات</h2>
+            <div class="code-block">
+                <div class="code-title">الاستعلامات التي تستخدم الفهارس</div>
+                <pre><code>-- هذه الاستعلامات تستخدم الفهرس تلقائياً:
+-- ST_Intersects
+SELECT * FROM cities c, regions r
+WHERE ST_Intersects(c.location, r.boundary);
+
+-- ST_Contains
+SELECT * FROM cities c, regions r
+WHERE ST_Contains(r.boundary, c.location);
+
+-- ST_DWithin
+SELECT * FROM cities c1, cities c2
+WHERE ST_DWithin(
+    ST_Transform(c1.location, 3857),
+    ST_Transform(c2.location, 3857),
+    10000
+);</code></pre>
+            </div>
+
+            <h2>صيانة الفهارس</h2>
+            <div class="code-block">
+                <div class="code-title">صيانة الفهارس</div>
+                <pre><code>-- إعادة بناء الفهرس
+REINDEX INDEX idx_cities_location;
+
+-- إعادة بناء جميع الفهارس في جدول
+REINDEX TABLE cities;
+
+-- تحديث الإحصائيات
+VACUUM ANALYZE cities;
+
+-- التحقق من حجم الفهرس
+SELECT 
+    pg_size_pretty(pg_relation_size('idx_cities_location')) AS index_size;</code></pre>
+            </div>
+
+            <h2>أفضل الممارسات</h2>
+            <ul>
+                <li>أنشئ فهرسًا على كل عمود جغرافي</li>
+                <li>استخدم VACUUM ANALYZE بعد إدراج بيانات كثيرة</li>
+                <li>راقب أداء الاستعلامات باستخدام EXPLAIN</li>
+                <li>أعد بناء الفهارس دوريًا</li>
+            </ul>
+
+            <h2>الخلاصة</h2>
+            <p>في هذه المحاضرة تعلمنا:</p>
+            <ul>
+                <li>ما هي الفهارس المكانية</li>
+                <li>كيفية إنشاء الفهارس</li>
+                <li>التحقق من الفهارس</li>
+                <li>صيانة الفهارس</li>
+            </ul>
+        </div>
+
+        <div class="navigation">
+            <a href="02-spatial-relationships.html" class="nav-link prev">← المحاضرة السابقة</a>
+            <a href="04-spatial-functions.html" class="nav-link next">المحاضرة التالية →</a>
+        </div>
+    </main>
+
+    <footer class="main-footer">
+        <div class="container">
+            <p>&copy; 2024 دورة PostgreSQL و PostGIS - م. ياسر المفعلاني</p>
+        </div>
+    </footer>
+
+    <script src="../../scripts/main.js"></script>
+</body>
+</html>
+
