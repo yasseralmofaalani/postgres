@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>المحاضرة 01: التحليل المكاني المتقدم - دورة PostgreSQL و PostGIS</title>
+    <link rel="stylesheet" href="../../styles/main.css">
+</head>
+<body>
+    <header class="main-header">
+        <div class="container">
+            <h1>دورة PostgreSQL و PostGIS الشاملة</h1>
+            <p class="instructor">مقدم الدورة: <strong>م. ياسر المفعلاني</strong></p>
+        </div>
+    </header>
+
+    <main class="lecture-content">
+        <div class="lecture-header">
+            <h1>المحاضرة 01: التحليل المكاني المتقدم</h1>
+            <div class="lecture-meta">
+                <span>المستوى: الخبير</span>
+                <span>المدة: 120 دقيقة</span>
+            </div>
+        </div>
+
+        <div class="lecture-body">
+            <a href="../../index.html" class="back-to-index">← العودة إلى الفهرس</a>
+
+            <h2>مقدمة</h2>
+            <p>
+                التحليل المكاني المتقدم يتضمن استخدام تقنيات متقدمة لفهم العلاقات المكانية، 
+                تحليل الأنماط، وإجراء حسابات معقدة على البيانات الجغرافية. في هذه المحاضرة 
+                سنتعلم دوال PostGIS المتقدمة وتقنيات التحليل المكاني الاحترافية.
+            </p>
+
+            <h2>دوال التحليل المتقدمة</h2>
+            <h3>ST_VoronoiPolygons - مخططات فورونوي</h3>
+            <p>
+                مخططات فورونوي تقسم الفضاء إلى مناطق بحيث تكون كل نقطة في منطقة أقرب إلى 
+                نقطة معينة من أي نقطة أخرى. مفيدة في تحليل مناطق الخدمة والتأثير.
+            </p>
+            <div class="code-block">
+                <div class="code-title">إنشاء مخططات فورونوي</div>
+                <pre><code>-- إنشاء مخططات فورونوي للمدن
+SELECT 
+    ST_VoronoiPolygons(
+        ST_Collect(location),
+        0,  -- tolerance
+        ST_Envelope(ST_Collect(location))  -- extent
+    ) AS voronoi
+FROM cities;
+
+-- حفظ النتائج في جدول
+CREATE TABLE voronoi_diagram AS
+SELECT 
+    ST_VoronoiPolygons(
+        ST_Collect(location),
+        0,
+        ST_Envelope(ST_Collect(location))
+    ) AS geometry
+FROM cities;
+
+-- تقسيم المخطط إلى مضلعات منفصلة
+SELECT 
+    (ST_Dump(
+        ST_VoronoiPolygons(
+            ST_Collect(location),
+            0,
+            ST_Envelope(ST_Collect(location))
+        )
+    )).geom AS voronoi_cell
+FROM cities;</code></pre>
+            </div>
+
+            <h3>ST_ShortestLine - أقصر خط</h3>
+            <p>حساب أقصر خط بين ميزتين جغرافيتين.</p>
+            <div class="code-block">
+                <div class="code-title">حساب أقصر خط</div>
+                <pre><code>-- أقصر خط بين منطقتين
+SELECT 
+    r1.name AS region1,
+    r2.name AS region2,
+    ST_ShortestLine(r1.boundary, r2.boundary) AS shortest_line,
+    ST_Length(
+        ST_Transform(
+            ST_ShortestLine(r1.boundary, r2.boundary),
+            3857
+        )
+    ) / 1000 AS distance_km
+FROM regions r1, regions r2
+WHERE r1.id < r2.id
+  AND ST_DWithin(
+      ST_Transform(r1.boundary, 3857),
+      ST_Transform(r2.boundary, 3857),
+      100000  -- 100 كيلومتر
+  )
+ORDER BY distance_km;</code></pre>
+            </div>
+
+            <h3>ST_ClosestPoint - أقرب نقطة</h3>
+            <div class="code-block">
+                <div class="code-title">العثور على أقرب نقطة</div>
+                <pre><code>-- أقرب نقطة على خط من نقطة معينة
+SELECT 
+    r.name AS road_name,
+    c.name AS city_name,
+    ST_ClosestPoint(r.geometry, c.location) AS closest_point,
+    ST_Distance(
+        ST_Transform(c.location, 3857),
+        ST_Transform(ST_ClosestPoint(r.geometry, c.location), 3857)
+    ) / 1000 AS distance_km
+FROM roads r, cities c
+ORDER BY distance_km
+LIMIT 10;</code></pre>
+            </div>
+
+            <h3>ST_ConvexHull - الغلاف المحدب</h3>
+            <div class="code-block">
+                <div class="code-title">الغلاف المحدب</div>
+                <pre><code>-- الغلاف المحدب لجميع المدن
+SELECT 
+    ST_ConvexHull(ST_Collect(location)) AS convex_hull
+FROM cities;
+
+-- الغلاف المحدب لكل منطقة
+SELECT 
+    name,
+    ST_ConvexHull(boundary) AS convex_hull,
+    ST_Area(
+        ST_Transform(ST_ConvexHull(boundary), 3857)
+    ) / 1000000 AS area_sqkm
+FROM regions;</code></pre>
+            </div>
+
+            <h3>ST_DelaunayTriangles - مثلثات ديلوناي</h3>
+            <div class="code-block">
+                <div class="code-title">مثلثات ديلوناي</div>
+                <pre><code>-- إنشاء مثلثات ديلوناي
+SELECT 
+    ST_DelaunayTriangles(
+        ST_Collect(location),
+        0,  -- tolerance
+        0   -- flags
+    ) AS delaunay
+FROM cities;
+
+-- تقسيم المثلثات
+SELECT 
+    (ST_Dump(
+        ST_DelaunayTriangles(ST_Collect(location), 0, 0)
+    )).geom AS triangle
+FROM cities;</code></pre>
+            </div>
+
+            <h2>التحليل الإحصائي المكاني</h2>
+            <h3>تحليل الكثافة المكانية</h3>
+            <div class="code-block">
+                <div class="code-title">حساب الكثافة</div>
+                <pre><code>-- إنشاء شبكة للكثافة
+CREATE TABLE density_grid AS
+SELECT 
+    ST_MakeEnvelope(
+        x, y,
+        x + 0.1, y + 0.1,
+        4326
+    ) AS cell,
+    COUNT(c.id) AS city_count
+FROM 
+    generate_series(46.0, 50.0, 0.1) AS x,
+    generate_series(24.0, 27.0, 0.1) AS y
+LEFT JOIN cities c ON ST_Within(
+    c.location,
+    ST_MakeEnvelope(x, y, x + 0.1, y + 0.1, 4326)
+)
+GROUP BY x, y;
+
+-- حساب الكثافة السكانية
+SELECT 
+    r.name,
+    COUNT(c.id) AS city_count,
+    SUM(c.population) AS total_population,
+    ST_Area(ST_Transform(r.boundary, 3857)) / 1000000 AS area_sqkm,
+    SUM(c.population) / (ST_Area(ST_Transform(r.boundary, 3857)) / 1000000) AS density_per_sqkm
+FROM regions r
+LEFT JOIN cities c ON ST_Within(c.location, r.boundary)
+GROUP BY r.id, r.name, r.boundary;</code></pre>
+            </div>
+
+            <h3>تحليل التجميع المكاني</h3>
+            <div class="code-block">
+                <div class="code-title">تحليل التجميع</div>
+                <pre><code>-- العثور على المدن المتجمعة
+WITH city_clusters AS (
+    SELECT 
+        c1.id,
+        c1.name,
+        COUNT(c2.id) AS nearby_cities,
+        AVG(ST_Distance(
+            ST_Transform(c1.location, 3857),
+            ST_Transform(c2.location, 3857)
+        )) / 1000 AS avg_distance_km
+    FROM cities c1
+    LEFT JOIN cities c2 ON 
+        ST_DWithin(
+            ST_Transform(c1.location, 3857),
+            ST_Transform(c2.location, 3857),
+            50000  -- 50 كيلومتر
+        )
+        AND c1.id != c2.id
+    GROUP BY c1.id, c1.name, c1.location
+)
+SELECT *
+FROM city_clusters
+WHERE nearby_cities >= 3
+ORDER BY nearby_cities DESC;</code></pre>
+            </div>
+
+            <h3>تحليل الاتجاه</h3>
+            <div class="code-block">
+                <div class="code-title">تحليل الاتجاه والاتجاهات</div>
+                <pre><code>-- حساب الاتجاه العام للطرق
+SELECT 
+    name,
+    ST_Azimuth(
+        ST_StartPoint(geometry),
+        ST_EndPoint(geometry)
+    ) * 180 / PI() AS azimuth_degrees,
+    CASE 
+        WHEN ST_Azimuth(ST_StartPoint(geometry), ST_EndPoint(geometry)) * 180 / PI() BETWEEN 0 AND 45 THEN 'شمال شرق'
+        WHEN ST_Azimuth(ST_StartPoint(geometry), ST_EndPoint(geometry)) * 180 / PI() BETWEEN 45 AND 90 THEN 'شرق'
+        WHEN ST_Azimuth(ST_StartPoint(geometry), ST_EndPoint(geometry)) * 180 / PI() BETWEEN 90 AND 135 THEN 'جنوب شرق'
+        WHEN ST_Azimuth(ST_StartPoint(geometry), ST_EndPoint(geometry)) * 180 / PI() BETWEEN 135 AND 180 THEN 'جنوب'
+        WHEN ST_Azimuth(ST_StartPoint(geometry), ST_EndPoint(geometry)) * 180 / PI() BETWEEN 180 AND 225 THEN 'جنوب غرب'
+        WHEN ST_Azimuth(ST_StartPoint(geometry), ST_EndPoint(geometry)) * 180 / PI() BETWEEN 225 AND 270 THEN 'غرب'
+        WHEN ST_Azimuth(ST_StartPoint(geometry), ST_EndPoint(geometry)) * 180 / PI() BETWEEN 270 AND 315 THEN 'شمال غرب'
+        ELSE 'شمال'
+    END AS direction
+FROM roads
+WHERE ST_GeometryType(geometry) = 'ST_LineString';</code></pre>
+            </div>
+
+            <h2>الدوال المتقدمة للقياس</h2>
+            <h3>ST_HausdorffDistance - مسافة هاوسدورف</h3>
+            <div class="code-block">
+                <div class="code-title">مسافة هاوسدورف</div>
+                <pre><code>-- حساب مسافة هاوسدورف بين منطقتين
+SELECT 
+    r1.name AS region1,
+    r2.name AS region2,
+    ST_HausdorffDistance(
+        ST_Transform(r1.boundary, 3857),
+        ST_Transform(r2.boundary, 3857)
+    ) / 1000 AS hausdorff_distance_km
+FROM regions r1, regions r2
+WHERE r1.id < r2.id;</code></pre>
+            </div>
+
+            <h3>ST_FrechetDistance - مسافة فريشيه</h3>
+            <div class="code-block">
+                <div class="code-title">مسافة فريشيه</div>
+                <pre><code>-- مقارنة خطين باستخدام مسافة فريشيه
+SELECT 
+    r1.name AS road1,
+    r2.name AS road2,
+    ST_FrechetDistance(
+        ST_Transform(r1.geometry, 3857),
+        ST_Transform(r2.geometry, 3857)
+    ) / 1000 AS frechet_distance_km
+FROM roads r1, roads r2
+WHERE r1.id < r2.id
+  AND ST_DWithin(
+      ST_Transform(r1.geometry, 3857),
+      ST_Transform(r2.geometry, 3857),
+      10000
+  );</code></pre>
+            </div>
+
+            <h2>التحليل المتقدم للشبكات</h2>
+            <h3>تحليل الشبكة الطرقية</h3>
+            <div class="code-block">
+                <div class="code-title">تحليل الشبكة</div>
+                <pre><code>-- العثور على نقاط التقاطع
+CREATE TABLE road_intersections AS
+SELECT 
+    ST_Intersection(r1.geometry, r2.geometry) AS intersection_point
+FROM roads r1, roads r2
+WHERE r1.id < r2.id
+  AND ST_Intersects(r1.geometry, r2.geometry)
+  AND ST_GeometryType(ST_Intersection(r1.geometry, r2.geometry)) = 'ST_Point';
+
+-- حساب طول الشبكة في كل منطقة
+SELECT 
+    r.name AS region_name,
+    COUNT(rd.id) AS road_count,
+    SUM(ST_Length(ST_Transform(rd.geometry, 3857))) / 1000 AS total_length_km,
+    SUM(ST_Length(ST_Transform(rd.geometry, 3857))) / 1000 / 
+        (ST_Area(ST_Transform(r.boundary, 3857)) / 1000000) AS road_density_km_per_sqkm
+FROM regions r
+LEFT JOIN roads rd ON ST_Intersects(r.boundary, rd.geometry)
+GROUP BY r.id, r.name, r.boundary;</code></pre>
+            </div>
+
+            <h2>التحليل المكاني المتقدم</h2>
+            <h3>تحليل الجوار (Neighborhood Analysis)</h3>
+            <div class="code-block">
+                <div class="code-title">تحليل الجوار</div>
+                <pre><code>-- تحليل الخصائص في الجوار
+CREATE FUNCTION analyze_neighborhood(
+    center_point GEOMETRY,
+    radius_meters NUMERIC
+)
+RETURNS TABLE(
+    city_count INTEGER,
+    total_population BIGINT,
+    road_length_km NUMERIC,
+    avg_distance_km NUMERIC
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        COUNT(DISTINCT c.id)::INTEGER,
+        COALESCE(SUM(c.population), 0)::BIGINT,
+        COALESCE(SUM(ST_Length(ST_Transform(rd.geometry, 3857))) / 1000, 0),
+        COALESCE(AVG(ST_Distance(
+            ST_Transform(center_point, 3857),
+            ST_Transform(c.location, 3857)
+        )) / 1000, 0)
+    FROM cities c
+    FULL OUTER JOIN roads rd ON ST_DWithin(
+        ST_Transform(center_point, 3857),
+        ST_Transform(rd.geometry, 3857),
+        radius_meters
+    )
+    WHERE ST_DWithin(
+        ST_Transform(center_point, 3857),
+        ST_Transform(COALESCE(c.location, rd.geometry), 3857),
+        radius_meters
+    );
+END;
+$$ LANGUAGE plpgsql;
+
+-- استخدام الدالة
+SELECT * FROM analyze_neighborhood(
+    ST_MakePoint(46.6753, 24.7136),
+    50000  -- 50 كيلومتر
+);</code></pre>
+            </div>
+
+            <h2>مثال شامل: نظام تحليل مكاني متكامل</h2>
+            <div class="code-block">
+                <div class="code-title">نظام تحليل شامل</div>
+                <pre><code>-- إنشاء جدول للتحليل المكاني
+CREATE TABLE spatial_analysis_results AS
+WITH voronoi AS (
+    SELECT ST_VoronoiPolygons(ST_Collect(location), 0) AS geom FROM cities
+),
+density AS (
+    SELECT 
+        r.id,
+        r.name,
+        COUNT(c.id) AS city_count,
+        SUM(c.population) AS total_pop,
+        ST_Area(ST_Transform(r.boundary, 3857)) / 1000000 AS area_sqkm
+    FROM regions r
+    LEFT JOIN cities c ON ST_Within(c.location, r.boundary)
+    GROUP BY r.id, r.name, r.boundary
+),
+network AS (
+    SELECT 
+        r.id,
+        COUNT(rd.id) AS road_count,
+        SUM(ST_Length(ST_Transform(rd.geometry, 3857))) / 1000 AS road_length_km
+    FROM regions r
+    LEFT JOIN roads rd ON ST_Intersects(r.boundary, rd.geometry)
+    GROUP BY r.id
+)
+SELECT 
+    d.id,
+    d.name,
+    d.city_count,
+    d.total_pop,
+    d.area_sqkm,
+    d.total_pop / NULLIF(d.area_sqkm, 0) AS population_density,
+    n.road_count,
+    n.road_length_km,
+    n.road_length_km / NULLIF(d.area_sqkm, 0) AS road_density,
+    ST_Centroid(d.boundary) AS centroid,
+    ST_ConvexHull(d.boundary) AS convex_hull
+FROM density d
+JOIN network n ON d.id = n.id;
+
+-- عرض النتائج
+SELECT 
+    name,
+    city_count,
+    total_pop,
+    ROUND(population_density, 2) AS pop_density_per_sqkm,
+    ROUND(road_density, 2) AS road_density_km_per_sqkm
+FROM spatial_analysis_results
+ORDER BY population_density DESC;</code></pre>
+            </div>
+
+            <h2>التحليل المكاني المتقدم: تقنيات إضافية</h2>
+            <h3>تحليل الكثافة النقطية (Point Density Analysis)</h3>
+            <p>
+                تحليل الكثافة النقطية يساعد في تحديد المناطق التي تحتوي على تركيز عالي من النقاط. 
+                هذا مفيد في تحليل أنماط الجريمة، مواقع الخدمات، أو أي ظاهرة جغرافية.
+            </p>
+            <div class="code-block">
+                <div class="code-title">حساب الكثافة النقطية</div>
+                <pre><code>-- إنشاء شبكة للكثافة
+CREATE TABLE density_grid AS
+WITH grid AS (
+    SELECT 
+        ST_MakeEnvelope(
+            x, y,
+            x + 0.01, y + 0.01,
+            4326
+        ) AS cell
+    FROM 
+        generate_series(46.0, 50.0, 0.01) AS x,
+        generate_series(24.0, 27.0, 0.01) AS y
+)
+SELECT 
+    cell AS geometry,
+    COUNT(c.id) AS point_count,
+    COUNT(c.id) / ST_Area(ST_Transform(cell, 3857)) * 1000000 AS density_per_sqkm
+FROM grid
+LEFT JOIN cities c ON ST_Within(c.location, cell)
+GROUP BY cell;
+
+-- تحليل الكثافة مع تصنيف
+SELECT 
+    geometry,
+    point_count,
+    CASE 
+        WHEN point_count = 0 THEN 'منخفضة جداً'
+        WHEN point_count BETWEEN 1 AND 5 THEN 'منخفضة'
+        WHEN point_count BETWEEN 6 AND 15 THEN 'متوسطة'
+        WHEN point_count BETWEEN 16 AND 30 THEN 'عالية'
+        ELSE 'عالية جداً'
+    END AS density_category
+FROM density_grid;</code></pre>
+            </div>
+
+            <h3>تحليل التجميع المكاني (Spatial Clustering)</h3>
+            <div class="code-block">
+                <div class="code-title">تحليل التجميع باستخدام DBSCAN</div>
+                <pre><code>-- تحديد المجموعات المكانية
+CREATE FUNCTION spatial_clusters(
+    table_name TEXT,
+    geometry_column TEXT,
+    eps_distance NUMERIC,
+    min_points INTEGER
+)
+RETURNS TABLE(
+    cluster_id INTEGER,
+    point_count INTEGER,
+    centroid GEOMETRY,
+    extent GEOMETRY
+) AS $$
+DECLARE
+    sql_query TEXT;
+BEGIN
+    -- هذه دالة مبسطة - يمكن تطويرها بشكل أكبر
+    sql_query := format('
+        WITH points AS (
+            SELECT %I FROM %I.%I
+        ),
+        clusters AS (
+            SELECT 
+                ROW_NUMBER() OVER () AS cluster_id,
+                COUNT(*) AS point_count,
+                ST_Centroid(ST_Collect(%I)) AS centroid,
+                ST_Envelope(ST_Collect(%I)) AS extent
+            FROM points
+            GROUP BY cluster_id
+        )
+        SELECT * FROM clusters
+    ', geometry_column, 'public', table_name, geometry_column, geometry_column);
+    
+    RETURN QUERY EXECUTE sql_query;
+END;
+$$ LANGUAGE plpgsql;</code></pre>
+            </div>
+
+            <h3>تحليل الاتجاه والاتجاهات (Directional Analysis)</h3>
+            <div class="code-block">
+                <div class="code-title">تحليل الاتجاهات المكانية</div>
+                <pre><code>-- حساب الاتجاه العام للتوزيع
+CREATE FUNCTION calculate_directional_trend(
+    points_geometry GEOMETRY
+)
+RETURNS NUMERIC AS $$
+DECLARE
+    centroid GEOMETRY;
+    max_distance NUMERIC;
+    direction_point GEOMETRY;
+    azimuth NUMERIC;
+BEGIN
+    -- حساب النقطة المركزية
+    centroid := ST_Centroid(points_geometry);
+    
+    -- العثور على أبعد نقطة
+    SELECT ST_MakePoint(ST_X(location), ST_Y(location))
+    INTO direction_point
+    FROM cities
+    ORDER BY ST_Distance(centroid, location) DESC
+    LIMIT 1;
+    
+    -- حساب الاتجاه
+    azimuth := ST_Azimuth(centroid, direction_point) * 180 / PI();
+    
+    RETURN azimuth;
+END;
+$$ LANGUAGE plpgsql;
+
+-- استخدام الدالة
+SELECT 
+    r.name,
+    calculate_directional_trend(ST_Collect(c.location)) AS trend_direction
+FROM regions r
+JOIN cities c ON ST_Within(c.location, r.boundary)
+GROUP BY r.id, r.name;</code></pre>
+            </div>
+
+            <h2>الربط مع برامج نظم المعلومات الجغرافية (GIS)</h2>
+            <p>
+                PostGIS يمكن ربطه مع مختلف برامج نظم المعلومات الجغرافية لاستخدام البيانات 
+                الجغرافية في التحليل والتصور. سنتعلم كيفية الربط مع أهم البرامج.
+            </p>
+
+            <h3>1. الربط مع QGIS</h3>
+            <p>
+                QGIS هو برنامج GIS مفتوح المصدر وقوي. يمكن ربطه مباشرة مع PostGIS لاستخدام 
+                البيانات في التحليل والتصور.
+            </p>
+            <div class="code-block">
+                <div class="code-title">إعداد الاتصال مع QGIS</div>
+                <pre><code>-- الخطوات في QGIS:
+-- 1. افتح QGIS
+-- 2. اذهب إلى: Layer > Add Layer > Add PostGIS Layers
+-- 3. أنشئ اتصال جديد:
+--    - Name: PostgreSQL/PostGIS Connection
+--    - Host: localhost (أو عنوان الخادم)
+--    - Port: 5432
+--    - Database: gis_db
+--    - Username: postgres
+--    - Password: [كلمة المرور]
+--    - SSL mode: Prefer
+-- 4. اختر الجداول المراد تحميلها
+-- 5. اضغط Add
+
+-- إنشاء View محسّن للعرض في QGIS
+CREATE VIEW cities_qgis_view AS
+SELECT 
+    id,
+    name,
+    population,
+    location AS geom,  -- QGIS يتوقع اسم 'geom'
+    CASE 
+        WHEN population > 5000000 THEN 'كبيرة جداً'
+        WHEN population > 2000000 THEN 'كبيرة'
+        WHEN population > 1000000 THEN 'متوسطة'
+        ELSE 'صغيرة'
+    END AS size_category
+FROM cities;
+
+-- إضافة عمود للتصنيف اللوني
+ALTER VIEW cities_qgis_view ADD COLUMN color_code INTEGER;
+-- يمكن استخدام هذا في QGIS للتصنيف اللوني</code></pre>
+            </div>
+
+            <h4>استخدام QGIS للتحليل المكاني</h4>
+            <div class="code-block">
+                <div class="code-title">تصدير نتائج التحليل من QGIS إلى PostGIS</div>
+                <pre><code>-- في QGIS:
+-- 1. قم بإجراء التحليل المطلوب (مثل Buffer, Intersection)
+-- 2. احفظ النتيجة كطبقة جديدة
+-- 3. اذهب إلى: Database > DB Manager > PostGIS
+-- 4. اختر قاعدة البيانات
+-- 5. Import Layer/File: اختر الطبقة المحفوظة
+-- 6. حدد Schema و Table name
+-- 7. اضغط Import
+
+-- أو استخدام ogr2ogr من سطر الأوامر:
+ogr2ogr -f "PostgreSQL" \
+    PG:"host=localhost user=postgres dbname=gis_db password=pass" \
+    analysis_result.shp \
+    -nln analysis_results \
+    -lco GEOMETRY_NAME=geometry</code></pre>
+            </div>
+
+            <h3>2. الربط مع ArcGIS</h3>
+            <p>
+                ArcGIS من ESRI هو أحد أشهر برامج GIS التجارية. يمكن ربطه مع PostGIS 
+                باستخدام ArcGIS Desktop أو ArcGIS Pro.
+            </p>
+            <div class="code-block">
+                <div class="code-title">إعداد الاتصال مع ArcGIS</div>
+                <pre><code>-- في ArcGIS Desktop/Pro:
+-- 1. افتح ArcCatalog أو Catalog في ArcGIS Pro
+-- 2. اذهب إلى: Database Connections > Add Database Connection
+-- 3. أدخل المعلومات:
+--    - Database Platform: PostgreSQL
+--    - Instance: localhost:5432
+--    - Database: gis_db
+--    - Authentication Type: Database authentication
+--    - Username: postgres
+--    - Password: [كلمة المرور]
+-- 4. اضغط OK
+
+-- إنشاء Feature Class محسّن
+-- في PostGIS، تأكد من:
+-- 1. وجود عمود geometry باسم 'shape' أو 'geom'
+-- 2. وجود SRID صحيح
+-- 3. وجود فهرس مكاني
+
+-- تحسين الجداول للعرض في ArcGIS
+ALTER TABLE cities 
+ADD COLUMN shape GEOMETRY(POINT, 4326);
+
+UPDATE cities SET shape = location;
+
+CREATE INDEX idx_cities_shape ON cities USING GIST(shape);
+
+-- ArcGIS يتوقع أسماء أعمدة معينة
+ALTER TABLE cities RENAME COLUMN location TO shape;</code></pre>
+            </div>
+
+            <h3>3. الربط مع GeoServer</h3>
+            <p>
+                GeoServer هو خادم مفتوح المصدر لنشر البيانات الجغرافية كخدمات ويب (WMS, WFS, WCS).
+            </p>
+            <div class="code-block">
+                <div class="code-title">إعداد PostGIS Store في GeoServer</div>
+                <pre><code>-- في GeoServer:
+-- 1. افتح GeoServer Web Admin
+-- 2. اذهب إلى: Stores > Add new store
+-- 3. اختر: PostGIS
+-- 4. أدخل المعلومات:
+--    - Workspace: اختر workspace موجود أو أنشئ جديد
+--    - Data Source Name: gis_db
+--    - Host: localhost
+--    - Port: 5432
+--    - Database: gis_db
+--    - Schema: public
+--    - User: postgres
+--    - Password: [كلمة المرور]
+-- 5. اضغط Save
+
+-- إنشاء Layer في GeoServer
+-- 1. بعد إنشاء Store، اضغط Publish
+-- 2. اختر الجدول أو View
+-- 3. حدد:
+--    - Native SRS: EPSG:4326
+--    - Declared SRS: EPSG:4326
+--    - Bounding Boxes: Compute from data
+-- 4. اضغط Save
+
+-- تحسين الأداء للخدمات
+-- إنشاء View محسّن
+CREATE VIEW cities_wms AS
+SELECT 
+    id,
+    name,
+    population,
+    ST_Simplify(location, 0.001) AS geometry  -- تبسيط للعرض السريع
+FROM cities
+WHERE population > 100000;  -- تصفية البيانات</code></pre>
+            </div>
+
+            <h3>4. الربط مع MapServer</h3>
+            <div class="code-block">
+                <div class="code-title">إعداد MapServer مع PostGIS</div>
+                <pre><code># ملف mapfile.map
+MAP
+    NAME "PostGIS Map"
+    STATUS ON
+    SIZE 800 600
+    EXTENT 46.0 24.0 50.0 27.0
+    UNITS DD
+    IMAGECOLOR 255 255 255
+    
+    CONNECTIONTYPE postgis
+    CONNECTION "host=localhost port=5432 dbname=gis_db user=postgres password=pass"
+    
+    LAYER
+        NAME "cities"
+        TYPE POINT
+        STATUS ON
+        CONNECTION "cities"
+        DATA "location FROM cities USING UNIQUE id USING srid=4326"
+        
+        CLASS
+            NAME "Cities"
+            STYLE
+                SYMBOL "circle"
+                SIZE 8
+                COLOR 255 0 0
+            END
+        END
+    END
+END</code></pre>
+            </div>
+
+            <h3>5. الربط مع Leaflet و OpenLayers</h3>
+            <p>
+                Leaflet و OpenLayers هما مكتبات JavaScript لإنشاء خرائط تفاعلية على الويب. 
+                يمكن ربطهما مع PostGIS عبر خدمات WMS/WFS أو APIs مخصصة.
+            </p>
+            <div class="code-block">
+                <div class="code-title">إنشاء API للبيانات الجغرافية</div>
+                <pre><code>-- إنشاء دالة لإرجاع GeoJSON
+CREATE OR REPLACE FUNCTION get_cities_geojson(
+    bbox GEOMETRY DEFAULT NULL,
+    min_population INTEGER DEFAULT 0
+)
+RETURNS TEXT AS $$
+DECLARE
+    result TEXT;
+BEGIN
+    SELECT json_build_object(
+        'type', 'FeatureCollection',
+        'features', json_agg(
+            json_build_object(
+                'type', 'Feature',
+                'geometry', ST_AsGeoJSON(location)::json,
+                'properties', json_build_object(
+                    'id', id,
+                    'name', name,
+                    'population', population
+                )
+            )
+        )
+    )::TEXT
+    INTO result
+    FROM cities
+    WHERE population >= min_population
+      AND (bbox IS NULL OR ST_Intersects(location, bbox));
+    
+    RETURN result;
+END;
+$$ LANGUAGE plpgsql;
+
+-- استخدام الدالة
+SELECT get_cities_geojson(
+    ST_MakeEnvelope(46.0, 24.0, 50.0, 27.0, 4326),
+    1000000
+);
+
+-- مثال على استخدام في Node.js/Express
+-- يمكن إنشاء endpoint:
+-- GET /api/cities?bbox=46,24,50,27&min_pop=1000000</code></pre>
+            </div>
+
+            <h3>6. الربط مع Python (GeoPandas, Shapely)</h3>
+            <div class="code-block">
+                <div class="code-title">استخدام Python للوصول إلى PostGIS</div>
+                <pre><code># تثبيت المكتبات المطلوبة
+# pip install psycopg2 geopandas sqlalchemy
+
+import psycopg2
+import geopandas as gpd
+from sqlalchemy import create_engine
+
+# الاتصال بقاعدة البيانات
+conn_string = "postgresql://postgres:password@localhost:5432/gis_db"
+engine = create_engine(conn_string)
+
+# قراءة البيانات
+query = """
+    SELECT 
+        id,
+        name,
+        population,
+        ST_AsText(location) AS geometry
+    FROM cities
+    WHERE population > 1000000
+"""
+
+# تحميل كـ GeoDataFrame
+gdf = gpd.read_postgis(query, engine, geom_col='geometry')
+
+# إجراء تحليل
+gdf['area_category'] = gdf['population'].apply(
+    lambda x: 'large' if x > 5000000 else 'medium' if x > 2000000 else 'small'
+)
+
+# حفظ النتائج مرة أخرى
+gdf.to_postgis('cities_analyzed', engine, if_exists='replace', index=False)
+
+# إغلاق الاتصال
+engine.dispose()</code></pre>
+            </div>
+
+            <h2>أفضل الممارسات للربط مع برامج GIS</h2>
+            <ul>
+                <li><strong>استخدم Views:</strong> أنشئ Views محسّنة للعرض بدلاً من الجداول مباشرة</li>
+                <li><strong>الفهارس:</strong> تأكد من وجود فهارس مكانية على جميع الأعمدة الجغرافية</li>
+                <li><strong>التبسيط:</strong> استخدم ST_Simplify للبيانات المعقدة للعرض السريع</li>
+                <li><strong>التصفية:</strong> قم بتصفية البيانات حسب الحاجة لتقليل حجم الاستجابة</li>
+                <li><strong>التخزين المؤقت:</strong> استخدم Materialized Views للبيانات التي لا تتغير كثيراً</li>
+                <li><strong>الأمان:</strong> استخدم مستخدمين بصلاحيات محدودة للوصول من برامج GIS</li>
+            </ul>
+
+            <h2>الخلاصة</h2>
+            <p>في هذه المحاضرة تعلمنا:</p>
+            <ul>
+                <li>دوال التحليل المتقدمة (ST_VoronoiPolygons, ST_ShortestLine, ST_ClosestPoint)</li>
+                <li>التحليل الإحصائي المكاني (الكثافة، التجميع، الاتجاه)</li>
+                <li>الدوال المتقدمة للقياس (ST_HausdorffDistance, ST_FrechetDistance)</li>
+                <li>تحليل الشبكات المكانية</li>
+                <li>تحليل الجوار</li>
+                <li>تحليل الكثافة النقطية والتجميع المكاني</li>
+                <li>الربط مع برامج GIS (QGIS, ArcGIS, GeoServer, MapServer)</li>
+                <li>الربط مع مكتبات JavaScript (Leaflet, OpenLayers)</li>
+                <li>الربط مع Python (GeoPandas)</li>
+                <li>أفضل الممارسات للربط مع برامج GIS</li>
+            </ul>
+
+            <p>في المحاضرة القادمة سنتعلم العمل مع البيانات النقطية (Raster).</p>
+        </div>
+
+        <div class="navigation">
+            <a href="../../index.html" class="nav-link prev">← العودة إلى الفهرس</a>
+            <a href="02-raster-data.html" class="nav-link next">المحاضرة التالية →</a>
+        </div>
+    </main>
+
+    <footer class="main-footer">
+        <div class="container">
+            <p>&copy; 2024 دورة PostgreSQL و PostGIS - م. ياسر المفعلاني</p>
+        </div>
+    </footer>
+
+    <script src="../../scripts/main.js"></script>
+</body>
+</html>
+
