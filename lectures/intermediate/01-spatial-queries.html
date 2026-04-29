@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>المحاضرة 01: الاستعلامات الجغرافية الأساسية - دورة PostgreSQL و PostGIS</title>
+    <link rel="stylesheet" href="../../styles/main.css">
+</head>
+<body>
+    <header class="main-header">
+        <div class="container">
+            <h1>دورة PostgreSQL و PostGIS الشاملة</h1>
+            <p class="instructor">مقدم الدورة: <strong>م. ياسر المفعلاني</strong></p>
+        </div>
+    </header>
+
+    <main class="lecture-content">
+        <div class="lecture-header">
+            <h1>المحاضرة 01: الاستعلامات الجغرافية الأساسية</h1>
+            <div class="lecture-meta">
+                <span>المستوى: المتوسط</span>
+                <span>المدة: 90 دقيقة</span>
+            </div>
+        </div>
+
+        <div class="lecture-body">
+            <a href="../../index.html" class="back-to-index">← العودة إلى الفهرس</a>
+
+            <h2>مقدمة</h2>
+            <p>
+                في هذه المحاضرة سنتعلم كيفية كتابة استعلامات جغرافية فعالة باستخدام PostGIS. 
+                سنغطي الدوال المكانية الأساسية والاستعلامات الشائعة.
+            </p>
+
+            <h2>الدوال الأساسية للقياس</h2>
+            <h3>ST_Distance - حساب المسافة</h3>
+            <div class="code-block">
+                <div class="code-title">حساب المسافة بين نقطتين</div>
+                <pre><code>-- المسافة بين نقطتين (بالدرجات - غير دقيق)
+SELECT ST_Distance(
+    ST_MakePoint(46.6753, 24.7136),  -- الرياض
+    ST_MakePoint(39.1728, 21.4858)   -- جدة
+) AS distance_degrees;
+
+-- المسافة بالمتر (دقيق)
+SELECT ST_Distance(
+    ST_Transform(ST_MakePoint(46.6753, 24.7136), 3857),
+    ST_Transform(ST_MakePoint(39.1728, 21.4858), 3857)
+) / 1000 AS distance_km;
+
+-- المسافة بين جدولين
+SELECT 
+    c1.name AS city1,
+    c2.name AS city2,
+    ST_Distance(
+        ST_Transform(c1.location, 3857),
+        ST_Transform(c2.location, 3857)
+    ) / 1000 AS distance_km
+FROM cities c1, cities c2
+WHERE c1.id < c2.id
+ORDER BY distance_km;</code></pre>
+            </div>
+
+            <h3>ST_Length - حساب طول الخط</h3>
+            <div class="code-block">
+                <div class="code-title">حساب طول الخط</div>
+                <pre><code>-- طول خط بالمتر
+SELECT 
+    name,
+    ST_Length(ST_Transform(geometry, 3857)) / 1000 AS length_km
+FROM roads;
+
+-- طول خط في نظام إحداثيات جغرافي (بالدرجات - غير دقيق)
+SELECT 
+    name,
+    ST_Length(geometry) AS length_degrees
+FROM roads;</code></pre>
+            </div>
+
+            <h3>ST_Area - حساب المساحة</h3>
+            <div class="code-block">
+                <div class="code-title">حساب مساحة المضلع</div>
+                <pre><code>-- مساحة بالمتر المربع
+SELECT 
+    name,
+    ST_Area(ST_Transform(boundary, 3857)) / 1000000 AS area_sqkm
+FROM regions;
+
+-- مساحة بعدة وحدات
+SELECT 
+    name,
+    ST_Area(ST_Transform(boundary, 3857)) AS area_sqm,
+    ST_Area(ST_Transform(boundary, 3857)) / 10000 AS area_hectares,
+    ST_Area(ST_Transform(boundary, 3857)) / 1000000 AS area_sqkm
+FROM regions;</code></pre>
+            </div>
+
+            <h3>ST_Perimeter - حساب المحيط</h3>
+            <div class="code-block">
+                <div class="code-title">حساب محيط المضلع</div>
+                <pre><code>SELECT 
+    name,
+    ST_Perimeter(ST_Transform(boundary, 3857)) / 1000 AS perimeter_km
+FROM regions;</code></pre>
+            </div>
+
+            <h2>الدوال الهندسية الأساسية</h2>
+            <h3>ST_Centroid - النقطة المركزية</h3>
+            <div class="code-block">
+                <div class="code-title">حساب النقطة المركزية</div>
+                <pre><code>-- النقطة المركزية لمضلع
+SELECT 
+    name,
+    ST_Centroid(boundary) AS centroid
+FROM regions;
+
+-- إضافة عمود للنقطة المركزية
+ALTER TABLE regions ADD COLUMN centroid GEOMETRY(POINT, 4326);
+UPDATE regions SET centroid = ST_Centroid(boundary);</code></pre>
+            </div>
+
+            <h3>ST_Buffer - المنطقة العازلة</h3>
+            <div class="code-block">
+                <div class="code-title">إنشاء منطقة عازلة</div>
+                <pre><code>-- منطقة عازلة حول نقطة (5 كيلومتر)
+SELECT 
+    name,
+    ST_Buffer(
+        ST_Transform(location, 3857),
+        5000  -- 5 كيلومتر بالمتر
+    ) AS buffer_zone
+FROM cities;
+
+-- منطقة عازلة حول خط (1 كيلومتر)
+SELECT 
+    name,
+    ST_Buffer(
+        ST_Transform(geometry, 3857),
+        1000
+    ) AS buffer_zone
+FROM roads;
+
+-- تحويل العودة إلى WGS84
+SELECT 
+    name,
+    ST_Transform(
+        ST_Buffer(
+            ST_Transform(location, 3857),
+            5000
+        ),
+        4326
+    ) AS buffer_zone
+FROM cities;</code></pre>
+            </div>
+
+            <h3>ST_Envelope - المربع المحيط</h3>
+            <div class="code-block">
+                <div class="code-title">المربع المحيط</div>
+                <pre><code>-- المربع المحيط لجميع المدن
+SELECT ST_Envelope(
+    ST_Collect(location)
+) AS bounding_box
+FROM cities;
+
+-- المربع المحيط لكل منطقة
+SELECT 
+    name,
+    ST_Envelope(boundary) AS bounding_box
+FROM regions;</code></pre>
+            </div>
+
+            <h2>الاستعلامات المكانية</h2>
+            <h3>البحث عن النقاط داخل منطقة</h3>
+            <div class="code-block">
+                <div class="code-title">النقاط داخل مضلع</div>
+                <pre><code>-- جميع المدن داخل منطقة معينة
+SELECT c.name, c.population
+FROM cities c, regions r
+WHERE r.name = 'منطقة الرياض'
+  AND ST_Within(c.location, r.boundary);
+
+-- أو باستخدام ST_Contains
+SELECT c.name, c.population
+FROM cities c, regions r
+WHERE r.name = 'منطقة الرياض'
+  AND ST_Contains(r.boundary, c.location);</code></pre>
+            </div>
+
+            <h3>البحث عن النقاط القريبة</h3>
+            <div class="code-block">
+                <div class="code-title">النقاط ضمن مسافة معينة</div>
+                <pre><code>-- جميع المدن ضمن 100 كيلومتر من الرياض
+SELECT 
+    c.name,
+    ST_Distance(
+        ST_Transform(riyadh.location, 3857),
+        ST_Transform(c.location, 3857)
+    ) / 1000 AS distance_km
+FROM cities c,
+     (SELECT location FROM cities WHERE name = 'الرياض') AS riyadh
+WHERE ST_DWithin(
+    ST_Transform(riyadh.location, 3857),
+    ST_Transform(c.location, 3857),
+    100000  -- 100 كيلومتر بالمتر
+)
+AND c.name != 'الرياض'
+ORDER BY distance_km;</code></pre>
+            </div>
+
+            <h3>البحث عن المناطق المتداخلة</h3>
+            <div class="code-block">
+                <div class="code-title">المناطق المتداخلة</div>
+                <pre><code>-- المناطق التي تتقاطع مع منطقة معينة
+SELECT r2.name
+FROM regions r1, regions r2
+WHERE r1.name = 'منطقة الرياض'
+  AND ST_Intersects(r1.boundary, r2.boundary)
+  AND r1.id != r2.id;
+
+-- المناطق التي تحتوي على منطقة أخرى
+SELECT r1.name AS parent, r2.name AS child
+FROM regions r1, regions r2
+WHERE ST_Contains(r1.boundary, r2.boundary)
+  AND r1.id != r2.id;</code></pre>
+            </div>
+
+            <h2>الدوال المتقدمة</h2>
+            <h3>ST_Intersection - التقاطع</h3>
+            <div class="code-block">
+                <div class="code-title">حساب التقاطع</div>
+                <pre><code>-- منطقة التقاطع بين منطقتين
+SELECT 
+    r1.name AS region1,
+    r2.name AS region2,
+    ST_Intersection(r1.boundary, r2.boundary) AS intersection
+FROM regions r1, regions r2
+WHERE ST_Intersects(r1.boundary, r2.boundary)
+  AND r1.id < r2.id;
+
+-- مساحة التقاطع
+SELECT 
+    r1.name AS region1,
+    r2.name AS region2,
+    ST_Area(
+        ST_Transform(
+            ST_Intersection(r1.boundary, r2.boundary),
+            3857
+        )
+    ) / 1000000 AS intersection_area_sqkm
+FROM regions r1, regions r2
+WHERE ST_Intersects(r1.boundary, r2.boundary)
+  AND r1.id < r2.id;</code></pre>
+            </div>
+
+            <h3>ST_Union - الاتحاد</h3>
+            <div class="code-block">
+                <div class="code-title">حساب الاتحاد</div>
+                <pre><code>-- اتحاد منطقتين
+SELECT 
+    ST_Union(r1.boundary, r2.boundary) AS union_geom
+FROM regions r1, regions r2
+WHERE r1.name = 'منطقة الرياض'
+  AND r2.name = 'منطقة القصيم';
+
+-- اتحاد جميع المناطق
+SELECT ST_Union(boundary) AS all_regions
+FROM regions;
+
+-- اتحاد باستخدام ST_Collect ثم ST_UnaryUnion
+SELECT ST_UnaryUnion(ST_Collect(boundary)) AS all_regions
+FROM regions;</code></pre>
+            </div>
+
+            <h3>ST_Difference - الفرق</h3>
+            <div class="code-block">
+                <div class="code-title">حساب الفرق</div>
+                <pre><code>-- المنطقة المتبقية بعد إزالة منطقة أخرى
+SELECT 
+    r1.name,
+    ST_Difference(r1.boundary, r2.boundary) AS difference
+FROM regions r1, regions r2
+WHERE r1.name = 'منطقة الرياض'
+  AND r2.name = 'منطقة القصيم'
+  AND ST_Intersects(r1.boundary, r2.boundary);</code></pre>
+            </div>
+
+            <h2>مثال شامل: تحليل جغرافي</h2>
+            <div class="code-block">
+                <div class="code-title">مثال شامل</div>
+                <pre><code>-- إنشاء جدول للتحليل
+CREATE TABLE spatial_analysis AS
+SELECT 
+    r.name AS region_name,
+    COUNT(c.id) AS city_count,
+    SUM(c.population) AS total_population,
+    ST_Area(ST_Transform(r.boundary, 3857)) / 1000000 AS area_sqkm,
+    ST_Perimeter(ST_Transform(r.boundary, 3857)) / 1000 AS perimeter_km,
+    ST_Centroid(r.boundary) AS centroid,
+    ST_Envelope(r.boundary) AS bounding_box
+FROM regions r
+LEFT JOIN cities c ON ST_Within(c.location, r.boundary)
+GROUP BY r.id, r.name, r.boundary;
+
+-- إحصائيات الطرق في كل منطقة
+SELECT 
+    r.name AS region_name,
+    COUNT(rd.id) AS road_count,
+    SUM(ST_Length(ST_Transform(rd.geometry, 3857))) / 1000 AS total_length_km
+FROM regions r
+LEFT JOIN roads rd ON ST_Intersects(r.boundary, rd.geometry)
+GROUP BY r.id, r.name;
+
+-- المدن الأقرب لبعضها البعض
+WITH city_pairs AS (
+    SELECT 
+        c1.name AS city1,
+        c2.name AS city2,
+        ST_Distance(
+            ST_Transform(c1.location, 3857),
+            ST_Transform(c2.location, 3857)
+        ) / 1000 AS distance_km
+    FROM cities c1, cities c2
+    WHERE c1.id < c2.id
+)
+SELECT *
+FROM city_pairs
+ORDER BY distance_km
+LIMIT 10;</code></pre>
+            </div>
+
+            <h2>الخلاصة</h2>
+            <p>في هذه المحاضرة تعلمنا:</p>
+            <ul>
+                <li>الدوال الأساسية للقياس (ST_Distance, ST_Length, ST_Area)</li>
+                <li>الدوال الهندسية (ST_Centroid, ST_Buffer, ST_Envelope)</li>
+                <li>الاستعلامات المكانية (ST_Within, ST_Contains, ST_DWithin)</li>
+                <li>الدوال المتقدمة (ST_Intersection, ST_Union, ST_Difference)</li>
+                <li>أمثلة عملية على التحليل الجغرافي</li>
+            </ul>
+
+            <p>في المحاضرة القادمة سنتعلم المزيد عن العلاقات المكانية.</p>
+        </div>
+
+        <div class="navigation">
+            <a href="../../index.html" class="nav-link prev">← العودة إلى الفهرس</a>
+            <a href="02-spatial-relationships.html" class="nav-link next">المحاضرة التالية: العلاقات المكانية →</a>
+        </div>
+    </main>
+
+    <footer class="main-footer">
+        <div class="container">
+            <p>&copy; 2024 دورة PostgreSQL و PostGIS - م. ياسر المفعلاني</p>
+        </div>
+    </footer>
+
+    <script src="../../scripts/main.js"></script>
+</body>
+</html>
+
