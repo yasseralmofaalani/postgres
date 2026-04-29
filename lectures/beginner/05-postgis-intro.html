@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>المحاضرة 05: مقدمة في PostGIS - دورة PostgreSQL و PostGIS</title>
+    <link rel="stylesheet" href="../../styles/main.css">
+</head>
+<body>
+    <header class="main-header">
+        <div class="container">
+            <h1>دورة PostgreSQL و PostGIS الشاملة</h1>
+            <p class="instructor">مقدم الدورة: <strong>م. ياسر المفعلاني</strong></p>
+        </div>
+    </header>
+
+    <main class="lecture-content">
+        <div class="lecture-header">
+            <h1>المحاضرة 05: مقدمة في PostGIS</h1>
+            <div class="lecture-meta">
+                <span>المستوى: المبتدئ</span>
+                <span>المدة: 60 دقيقة</span>
+            </div>
+        </div>
+
+        <div class="lecture-body">
+            <a href="../../index.html" class="back-to-index">← العودة إلى الفهرس</a>
+
+            <h2>ما هو PostGIS؟</h2>
+            <p>
+                PostGIS هو امتداد مكاني مفتوح المصدر لـ PostgreSQL يضيف دعمًا لأنواع البيانات 
+                الجغرافية والوظائف المكانية. يتيح PostGIS تخزين واستعلام البيانات الجغرافية 
+                مثل النقاط، الخطوط، المضلعات، والبيانات النقطية (Raster).
+            </p>
+
+            <div class="alert alert-info">
+                <strong>معلومة:</strong> PostGIS يتبع معايير Open Geospatial Consortium (OGC) 
+                وهو متوافق مع معايير SQL/MM للمعلومات المكانية.
+            </div>
+
+            <h2>مميزات PostGIS</h2>
+            <ul>
+                <li><strong>دعم أنواع البيانات الجغرافية:</strong> Point, LineString, Polygon, MultiPoint, وغيرها</li>
+                <li><strong>مئات الدوال المكانية:</strong> للقياس، التحليل، والتحويل</li>
+                <li><strong>الفهارس المكانية:</strong> GIST لتحسين أداء الاستعلامات</li>
+                <li><strong>دعم أنظمة الإحداثيات:</strong> أكثر من 3000 نظام إحداثي</li>
+                <li><strong>البيانات النقطية:</strong> دعم كامل للبيانات النقطية</li>
+                <li><strong>الطوبولوجيا:</strong> دعم العلاقات الطوبولوجية</li>
+            </ul>
+
+            <h2>تثبيت PostGIS</h2>
+            <h3>التحقق من التثبيت</h3>
+            <div class="code-block">
+                <div class="code-title">التحقق من تثبيت PostGIS</div>
+                <pre><code>-- الاتصال بقاعدة البيانات
+psql -U postgres -d mydb
+
+-- التحقق من الإصدار
+SELECT PostGIS_Version();
+
+-- عرض معلومات كاملة
+SELECT PostGIS_Full_Version();
+
+-- عرض جميع الامتدادات المثبتة
+SELECT * FROM pg_extension WHERE extname = 'postgis';</code></pre>
+            </div>
+
+            <h3>تثبيت PostGIS في قاعدة بيانات</h3>
+            <div class="code-block">
+                <div class="code-title">تثبيت PostGIS</div>
+                <pre><code>-- إنشاء قاعدة بيانات جديدة
+CREATE DATABASE gis_db;
+
+-- الاتصال بقاعدة البيانات
+\c gis_db
+
+-- تثبيت PostGIS
+CREATE EXTENSION postgis;
+
+-- تثبيت امتدادات إضافية (اختياري)
+CREATE EXTENSION postgis_topology;    -- للطوبولوجيا
+CREATE EXTENSION postgis_raster;      -- للبيانات النقطية
+CREATE EXTENSION fuzzystrmatch;       -- للمقارنة النصية الضبابية
+CREATE EXTENSION postgis_tiger_geocoder;  -- للجغرافيا الترميزية</code></pre>
+            </div>
+
+            <h2>أنظمة الإحداثيات (Coordinate Reference Systems)</h2>
+            <p>
+                نظام الإحداثيات يحدد كيفية تمثيل المواقع الجغرافية على سطح الأرض. 
+                PostGIS يدعم آلاف أنظمة الإحداثيات المختلفة.
+            </p>
+
+            <h3>أنظمة الإحداثيات الشائعة</h3>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>SRID</th>
+                            <th>الاسم</th>
+                            <th>الوصف</th>
+                            <th>الاستخدام</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>4326</td>
+                            <td>WGS 84</td>
+                            <td>نظام إحداثيات جغرافي عالمي</td>
+                            <td>GPS، الخرائط العالمية</td>
+                        </tr>
+                        <tr>
+                            <td>3857</td>
+                            <td>Web Mercator</td>
+                            <td>إسقاط مركاتور للويب</td>
+                            <td>Google Maps، OpenStreetMap</td>
+                        </tr>
+                        <tr>
+                            <td>32637</td>
+                            <td>UTM Zone 37N</td>
+                            <td>نظام UTM للمنطقة 37 شمال</td>
+                            <td>السعودية، الشرق الأوسط</td>
+                        </tr>
+                        <tr>
+                            <td>32638</td>
+                            <td>UTM Zone 38N</td>
+                            <td>نظام UTM للمنطقة 38 شمال</td>
+                            <td>السعودية، الشرق الأوسط</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="code-block">
+                <div class="code-title">التحقق من أنظمة الإحداثيات</div>
+                <pre><code>-- عرض معلومات نظام إحداثيات
+SELECT * FROM spatial_ref_sys WHERE srid = 4326;
+
+-- البحث عن أنظمة إحداثيات
+SELECT srid, auth_name, auth_srid, proj4text 
+FROM spatial_ref_sys 
+WHERE auth_name = 'EPSG' AND auth_srid = 4326;
+
+-- عرض أنظمة الإحداثيات المتاحة
+SELECT srid, auth_name, auth_srid, srtext 
+FROM spatial_ref_sys 
+WHERE auth_name = 'EPSG' 
+ORDER BY auth_srid 
+LIMIT 20;</code></pre>
+            </div>
+
+            <h2>أنواع البيانات الجغرافية الأساسية</h2>
+            <h3>1. Point (النقطة)</h3>
+            <p>تمثل موقعًا واحدًا في الفضاء (خط الطول، خط العرض)</p>
+            <div class="code-block">
+                <div class="code-title">إنشاء نقطة</div>
+                <pre><code>-- إنشاء نقطة باستخدام ST_MakePoint
+SELECT ST_MakePoint(46.6753, 24.7136) AS riyadh_point;
+
+-- إنشاء نقطة مع SRID
+SELECT ST_SetSRID(ST_MakePoint(46.6753, 24.7136), 4326) AS riyadh_point;
+
+-- استخدام ST_GeomFromText
+SELECT ST_GeomFromText('POINT(46.6753 24.7136)', 4326) AS riyadh_point;
+
+-- استخدام WKT (Well-Known Text)
+SELECT 'POINT(46.6753 24.7136)'::geometry AS riyadh_point;</code></pre>
+            </div>
+
+            <h3>2. LineString (الخط)</h3>
+            <p>تمثل سلسلة من النقاط المتصلة (مثل طريق أو نهر)</p>
+            <div class="code-block">
+                <div class="code-title">إنشاء خط</div>
+                <pre><code>-- إنشاء خط من عدة نقاط
+SELECT ST_MakeLine(
+    ST_MakePoint(46.6753, 24.7136),  -- الرياض
+    ST_MakePoint(39.1728, 21.4858)   -- جدة
+) AS route_line;
+
+-- استخدام WKT
+SELECT ST_GeomFromText(
+    'LINESTRING(46.6753 24.7136, 39.1728 21.4858)', 
+    4326
+) AS route_line;</code></pre>
+            </div>
+
+            <h3>3. Polygon (المضلع)</h3>
+            <p>تمثل منطقة مغلقة (مثل حدود مدينة أو دولة)</p>
+            <div class="code-block">
+                <div class="code-title">إنشاء مضلع</div>
+                <pre><code>-- إنشاء مضلع بسيط (مربع)
+SELECT ST_MakePolygon(
+    ST_GeomFromText('LINESTRING(46.6 24.7, 46.7 24.7, 46.7 24.8, 46.6 24.8, 46.6 24.7)', 4326)
+) AS area_polygon;
+
+-- استخدام WKT
+SELECT ST_GeomFromText(
+    'POLYGON((46.6 24.7, 46.7 24.7, 46.7 24.8, 46.6 24.8, 46.6 24.7))', 
+    4326
+) AS area_polygon;</code></pre>
+            </div>
+
+            <h2>إنشاء جدول مع بيانات جغرافية</h2>
+            <div class="code-block">
+                <div class="code-title">إنشاء جدول جغرافي</div>
+                <pre><code>-- إنشاء جدول للمدن مع موقعها الجغرافي
+CREATE TABLE cities (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    population INTEGER,
+    location GEOMETRY(POINT, 4326)  -- نقطة في نظام WGS84
+);
+
+-- إدراج بيانات
+INSERT INTO cities (name, population, location) VALUES
+    ('الرياض', 7700000, ST_SetSRID(ST_MakePoint(46.6753, 24.7136), 4326)),
+    ('جدة', 4700000, ST_SetSRID(ST_MakePoint(39.1728, 21.4858), 4326)),
+    ('الدمام', 1200000, ST_SetSRID(ST_MakePoint(50.1033, 26.4207), 4326)),
+    ('مكة المكرمة', 2400000, ST_SetSRID(ST_MakePoint(39.8579, 21.3891), 4326));
+
+-- عرض البيانات
+SELECT 
+    name,
+    population,
+    ST_AsText(location) AS location_wkt,
+    ST_X(location) AS longitude,
+    ST_Y(location) AS latitude
+FROM cities;</code></pre>
+            </div>
+
+            <h2>الدوال المكانية الأساسية</h2>
+            <h3>ST_AsText - تحويل إلى نص</h3>
+            <div class="code-block">
+                <div class="code-title">تحويل الهندسة إلى نص</div>
+                <pre><code>SELECT 
+    name,
+    ST_AsText(location) AS location_text
+FROM cities;</code></pre>
+            </div>
+
+            <h3>ST_X و ST_Y - استخراج الإحداثيات</h3>
+            <div class="code-block">
+                <div class="code-title">استخراج خط الطول والعرض</div>
+                <pre><code>SELECT 
+    name,
+    ST_X(location) AS longitude,  -- خط الطول
+    ST_Y(location) AS latitude     -- خط العرض
+FROM cities;</code></pre>
+            </div>
+
+            <h3>ST_Distance - حساب المسافة</h3>
+            <div class="code-block">
+                <div class="code-title">حساب المسافة بين نقطتين</div>
+                <pre><code>-- المسافة بين الرياض وجدة (بالدرجات)
+SELECT 
+    ST_Distance(
+        (SELECT location FROM cities WHERE name = 'الرياض'),
+        (SELECT location FROM cities WHERE name = 'جدة')
+    ) AS distance_degrees;
+
+-- المسافة بالكيلومترات (يجب تحويل إلى نظام إحداثيات مناسب)
+SELECT 
+    ST_Distance(
+        ST_Transform((SELECT location FROM cities WHERE name = 'الرياض'), 3857),
+        ST_Transform((SELECT location FROM cities WHERE name = 'جدة'), 3857)
+    ) / 1000 AS distance_km;</code></pre>
+            </div>
+
+            <h3>ST_Area - حساب المساحة</h3>
+            <div class="code-block">
+                <div class="code-title">حساب مساحة مضلع</div>
+                <pre><code>-- إنشاء جدول للمناطق
+CREATE TABLE regions (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    boundary GEOMETRY(POLYGON, 4326)
+);
+
+-- حساب المساحة (بالمتر المربع بعد التحويل)
+SELECT 
+    name,
+    ST_Area(ST_Transform(boundary, 3857)) AS area_sqm,
+    ST_Area(ST_Transform(boundary, 3857)) / 1000000 AS area_sqkm
+FROM regions;</code></pre>
+            </div>
+
+            <h2>التحويل بين أنظمة الإحداثيات</h2>
+            <div class="code-block">
+                <div class="code-title">تحويل الإحداثيات</div>
+                <pre><code>-- تحويل من WGS84 إلى Web Mercator
+SELECT 
+    name,
+    location AS location_wgs84,
+    ST_Transform(location, 3857) AS location_mercator
+FROM cities;
+
+-- تحويل من WGS84 إلى UTM
+SELECT 
+    name,
+    location AS location_wgs84,
+    ST_Transform(location, 32637) AS location_utm
+FROM cities;</code></pre>
+            </div>
+
+            <h2>مثال شامل</h2>
+            <div class="code-block">
+                <div class="code-title">مثال شامل: قاعدة بيانات جغرافية</div>
+                <pre><code>-- إنشاء قاعدة بيانات جغرافية
+CREATE DATABASE saudi_arabia_gis;
+\c saudi_arabia_gis
+
+-- تثبيت PostGIS
+CREATE EXTENSION postgis;
+
+-- جدول المحافظات
+CREATE TABLE provinces (
+    id SERIAL PRIMARY KEY,
+    name_ar VARCHAR(100) NOT NULL,
+    name_en VARCHAR(100),
+    code VARCHAR(10) UNIQUE,
+    population INTEGER,
+    area_km2 DECIMAL(10, 2),
+    capital_city VARCHAR(100),
+    geometry GEOMETRY(POLYGON, 4326),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- جدول المدن
+CREATE TABLE cities (
+    id SERIAL PRIMARY KEY,
+    name_ar VARCHAR(100) NOT NULL,
+    name_en VARCHAR(100),
+    province_id INTEGER,
+    population INTEGER,
+    elevation_m INTEGER,
+    location GEOMETRY(POINT, 4326),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (province_id) REFERENCES provinces(id)
+);
+
+-- جدول الطرق
+CREATE TABLE roads (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(200),
+    road_type VARCHAR(50),  -- highway, main_road, local_road
+    length_km DECIMAL(10, 2),
+    geometry GEOMETRY(LINESTRING, 4326),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- إدراج بيانات تجريبية
+INSERT INTO cities (name_ar, name_en, population, location) VALUES
+    ('الرياض', 'Riyadh', 7700000, 
+     ST_SetSRID(ST_MakePoint(46.6753, 24.7136), 4326)),
+    ('جدة', 'Jeddah', 4700000, 
+     ST_SetSRID(ST_MakePoint(39.1728, 21.4858), 4326));
+
+-- استعلام بسيط
+SELECT 
+    name_ar,
+    population,
+    ST_X(location) AS longitude,
+    ST_Y(location) AS latitude
+FROM cities
+ORDER BY population DESC;</code></pre>
+            </div>
+
+            <h2>الخلاصة</h2>
+            <p>في هذه المحاضرة تعلمنا:</p>
+            <ul>
+                <li>ما هو PostGIS ومميزاته</li>
+                <li>كيفية تثبيت PostGIS</li>
+                <li>أنظمة الإحداثيات الشائعة</li>
+                <li>أنواع البيانات الجغرافية الأساسية (Point, LineString, Polygon)</li>
+                <li>الدوال المكانية الأساسية</li>
+                <li>التحويل بين أنظمة الإحداثيات</li>
+            </ul>
+
+            <p>في المحاضرة القادمة سنتعلم المزيد عن أنواع البيانات الجغرافية المتقدمة.</p>
+        </div>
+
+        <div class="navigation">
+            <a href="04-tables-constraints.html" class="nav-link prev">← المحاضرة السابقة: إنشاء الجداول والقيود</a>
+            <a href="06-spatial-data-types.html" class="nav-link next">المحاضرة التالية: أنواع البيانات الجغرافية →</a>
+        </div>
+    </main>
+
+    <footer class="main-footer">
+        <div class="container">
+            <p>&copy; 2024 دورة PostgreSQL و PostGIS - م. ياسر المفعلاني</p>
+        </div>
+    </footer>
+
+    <script src="../../scripts/main.js"></script>
+</body>
+</html>
+

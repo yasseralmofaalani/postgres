@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>المحاضرة 03: أساسيات SQL - دورة PostgreSQL و PostGIS</title>
+    <link rel="stylesheet" href="../../styles/main.css">
+</head>
+<body>
+    <header class="main-header">
+        <div class="container">
+            <h1>دورة PostgreSQL و PostGIS الشاملة</h1>
+            <p class="instructor">مقدم الدورة: <strong>م. ياسر المفعلاني</strong></p>
+        </div>
+    </header>
+
+    <main class="lecture-content">
+        <div class="lecture-header">
+            <h1>المحاضرة 03: أساسيات SQL</h1>
+            <div class="lecture-meta">
+                <span>المستوى: المبتدئ</span>
+                <span>المدة: 90 دقيقة</span>
+            </div>
+        </div>
+
+        <div class="lecture-body">
+            <a href="../../index.html" class="back-to-index">← العودة إلى الفهرس</a>
+
+            <h2>ما هو SQL؟</h2>
+            <p>
+                SQL (Structured Query Language) هي لغة برمجية مصممة لإدارة البيانات في قواعد 
+                البيانات العلائقية. تُستخدم لإنشاء الجداول، إدراج البيانات، تحديثها، حذفها، والاستعلام عنها.
+            </p>
+
+            <div class="definition-list">
+                <dt>DDL (Data Definition Language):</dt>
+                <dd>أوامر لتعريف هيكل قاعدة البيانات: CREATE, ALTER, DROP</dd>
+                
+                <dt>DML (Data Manipulation Language):</dt>
+                <dd>أوامر لمعالجة البيانات: INSERT, UPDATE, DELETE, SELECT</dd>
+                
+                <dt>DCL (Data Control Language):</dt>
+                <dd>أوامر للتحكم في الصلاحيات: GRANT, REVOKE</dd>
+            </div>
+
+            <h2>أوامر SELECT - استعلام البيانات</h2>
+            <h3>الاستعلام البسيط</h3>
+            <div class="code-block">
+                <div class="code-title">استعلام بسيط</div>
+                <pre><code>-- استعلام جميع البيانات من جدول
+SELECT * FROM cities;
+
+-- استعلام أعمدة محددة
+SELECT name, population FROM cities;
+
+-- استعلام مع شرط WHERE
+SELECT * FROM cities WHERE population > 1000000;
+
+-- استعلام مع ترتيب ORDER BY
+SELECT * FROM cities ORDER BY population DESC;
+
+-- تحديد عدد الصفوف LIMIT
+SELECT * FROM cities ORDER BY population DESC LIMIT 5;</code></pre>
+            </div>
+
+            <h3>عوامل المقارنة والمنطق</h3>
+            <div class="code-block">
+                <div class="code-title">عوامل المقارنة</div>
+                <pre><code>-- عوامل المقارنة
+=          -- يساوي
+!= أو <>   -- لا يساوي
+<          -- أصغر من
+>          -- أكبر من
+<=         -- أصغر من أو يساوي
+>=         -- أكبر من أو يساوي
+
+-- أمثلة
+SELECT * FROM cities WHERE population >= 5000000;
+SELECT * FROM cities WHERE name != 'الرياض';
+
+-- العوامل المنطقية
+AND        -- و
+OR         -- أو
+NOT        -- ليس
+
+-- مثال
+SELECT * FROM cities 
+WHERE population > 1000000 AND population < 5000000;
+
+SELECT * FROM cities 
+WHERE name = 'الرياض' OR name = 'جدة';</code></pre>
+            </div>
+
+            <h3>البحث النصي LIKE و ILIKE</h3>
+            <div class="code-block">
+                <div class="code-title">البحث النصي</div>
+                <pre><code>-- LIKE (حساس لحالة الأحرف)
+SELECT * FROM cities WHERE name LIKE 'ال%';  -- يبدأ بـ "ال"
+SELECT * FROM cities WHERE name LIKE '%م';   -- ينتهي بـ "م"
+SELECT * FROM cities WHERE name LIKE '%د%';  -- يحتوي على "د"
+
+-- ILIKE (غير حساس لحالة الأحرف)
+SELECT * FROM cities WHERE name ILIKE 'riyadh';
+
+-- الرموز الخاصة
+%          -- أي عدد من الأحرف
+_          -- حرف واحد فقط
+
+-- مثال
+SELECT * FROM cities WHERE name LIKE 'ال_ا%';</code></pre>
+            </div>
+
+            <h2>أوامر INSERT - إدراج البيانات</h2>
+            <div class="code-block">
+                <div class="code-title">إدراج البيانات</div>
+                <pre><code>-- إدراج صف واحد
+INSERT INTO cities (name, population) 
+VALUES ('الرياض', 7700000);
+
+-- إدراج عدة صفوف
+INSERT INTO cities (name, population) 
+VALUES 
+    ('جدة', 4700000),
+    ('الدمام', 1200000),
+    ('مكة المكرمة', 2400000);
+
+-- إدراج مع تحديد جميع الأعمدة
+INSERT INTO cities VALUES (DEFAULT, 'المدينة المنورة', 1500000);
+
+-- إدراج من استعلام آخر
+INSERT INTO cities (name, population)
+SELECT name, population FROM old_cities WHERE population > 1000000;</code></pre>
+            </div>
+
+            <h2>أوامر UPDATE - تحديث البيانات</h2>
+            <div class="code-block">
+                <div class="code-title">تحديث البيانات</div>
+                <pre><code>-- تحديث جميع الصفوف
+UPDATE cities SET population = population * 1.1;
+
+-- تحديث صفوف محددة
+UPDATE cities 
+SET population = 8000000 
+WHERE name = 'الرياض';
+
+-- تحديث عدة أعمدة
+UPDATE cities 
+SET name = 'الرياض الجديدة', population = 8500000 
+WHERE id = 1;
+
+-- تحديث مع شرط معقد
+UPDATE cities 
+SET population = population + 100000 
+WHERE population < 2000000 AND name LIKE 'ال%';</code></pre>
+            </div>
+
+            <div class="alert alert-warning">
+                <strong>تحذير:</strong> كن حذرًا عند استخدام UPDATE بدون WHERE، 
+                لأنها ستحدث جميع الصفوف في الجدول!
+            </div>
+
+            <h2>أوامر DELETE - حذف البيانات</h2>
+            <div class="code-block">
+                <div class="code-title">حذف البيانات</div>
+                <pre><code>-- حذف صفوف محددة
+DELETE FROM cities WHERE population < 100000;
+
+-- حذف جميع الصفوف
+DELETE FROM cities;
+
+-- حذف مع شرط معقد
+DELETE FROM cities 
+WHERE name = 'الرياض' OR population < 50000;
+
+-- حذف مع JOIN (سنشرحه لاحقاً)
+DELETE FROM cities 
+USING regions 
+WHERE cities.region_id = regions.id AND regions.name = 'المنطقة الشرقية';</code></pre>
+            </div>
+
+            <div class="alert alert-danger">
+                <strong>تحذير خطير:</strong> DELETE بدون WHERE يحذف جميع الصفوف! 
+                استخدم TRUNCATE بدلاً منه إذا أردت حذف جميع البيانات.
+            </div>
+
+            <h2>الدوال المجمعة (Aggregate Functions)</h2>
+            <div class="code-block">
+                <div class="code-title">الدوال المجمعة</div>
+                <pre><code>-- COUNT: عدد الصفوف
+SELECT COUNT(*) FROM cities;
+SELECT COUNT(*) FROM cities WHERE population > 1000000;
+
+-- SUM: مجموع القيم
+SELECT SUM(population) AS total_population FROM cities;
+
+-- AVG: المتوسط
+SELECT AVG(population) AS average_population FROM cities;
+
+-- MAX: القيمة العظمى
+SELECT MAX(population) AS max_population FROM cities;
+
+-- MIN: القيمة الصغرى
+SELECT MIN(population) AS min_population FROM cities;
+
+-- استخدام GROUP BY
+SELECT region_id, COUNT(*) AS city_count, SUM(population) AS total_pop
+FROM cities 
+GROUP BY region_id;
+
+-- استخدام HAVING (شرط على المجموعات)
+SELECT region_id, COUNT(*) AS city_count
+FROM cities 
+GROUP BY region_id
+HAVING COUNT(*) > 5;</code></pre>
+            </div>
+
+            <h2>الدوال النصية</h2>
+            <div class="code-block">
+                <div class="code-title">الدوال النصية الشائعة</div>
+                <pre><code>-- CONCAT: دمج النصوص
+SELECT CONCAT(name, ' - ', population) AS city_info FROM cities;
+
+-- LENGTH: طول النص
+SELECT name, LENGTH(name) AS name_length FROM cities;
+
+-- UPPER و LOWER: تحويل الحالة
+SELECT UPPER(name) AS upper_name, LOWER(name) AS lower_name FROM cities;
+
+-- TRIM: إزالة المسافات
+SELECT TRIM('  الرياض  ') AS trimmed;  -- النتيجة: 'الرياض'
+
+-- SUBSTRING: استخراج جزء من النص
+SELECT SUBSTRING(name FROM 1 FOR 3) AS first_three FROM cities;
+
+-- REPLACE: استبدال النص
+SELECT REPLACE(name, 'ال', '') AS name_without_al FROM cities;</code></pre>
+            </div>
+
+            <h2>الدوال الرياضية والتاريخ</h2>
+            <div class="code-block">
+                <div class="code-title">الدوال الرياضية والتاريخ</div>
+                <pre><code>-- الدوال الرياضية
+SELECT 
+    ROUND(123.456, 2) AS rounded,      -- 123.46
+    CEIL(123.1) AS ceiling,           -- 124
+    FLOOR(123.9) AS floor,            -- 123
+    ABS(-123) AS absolute,            -- 123
+    POWER(2, 3) AS power;             -- 8
+
+-- الدوال التاريخية
+SELECT 
+    CURRENT_DATE AS today,            -- التاريخ الحالي
+    CURRENT_TIME AS now_time,         -- الوقت الحالي
+    CURRENT_TIMESTAMP AS now,         -- التاريخ والوقت
+    NOW() AS timestamp;               -- نفس CURRENT_TIMESTAMP
+
+-- العمليات على التاريخ
+SELECT 
+    DATE '2024-01-15' + INTERVAL '30 days' AS future_date,
+    DATE '2024-01-15' - DATE '2024-01-01' AS days_diff,
+    EXTRACT(YEAR FROM CURRENT_DATE) AS current_year,
+    EXTRACT(MONTH FROM CURRENT_DATE) AS current_month;</code></pre>
+            </div>
+
+            <h2>الاستعلامات المتداخلة (Subqueries)</h2>
+            <div class="code-block">
+                <div class="code-title">الاستعلامات المتداخلة</div>
+                <pre><code>-- استعلام متداخل في WHERE
+SELECT * FROM cities 
+WHERE population > (SELECT AVG(population) FROM cities);
+
+-- استعلام متداخل في SELECT
+SELECT 
+    name,
+    population,
+    (SELECT AVG(population) FROM cities) AS avg_population
+FROM cities;
+
+-- استعلام متداخل في FROM
+SELECT * FROM (
+    SELECT name, population 
+    FROM cities 
+    WHERE population > 1000000
+) AS large_cities;
+
+-- استخدام IN مع استعلام متداخل
+SELECT * FROM cities 
+WHERE region_id IN (
+    SELECT id FROM regions WHERE name LIKE 'المنطقة%'
+);</code></pre>
+            </div>
+
+            <h2>مثال شامل</h2>
+            <div class="code-block">
+                <div class="code-title">مثال شامل يجمع عدة مفاهيم</div>
+                <pre><code>-- إنشاء جدول
+CREATE TABLE cities (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    population INTEGER,
+    region_id INTEGER,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- إدراج بيانات
+INSERT INTO cities (name, population, region_id) VALUES
+    ('الرياض', 7700000, 1),
+    ('جدة', 4700000, 2),
+    ('الدمام', 1200000, 1),
+    ('مكة المكرمة', 2400000, 2);
+
+-- استعلام شامل
+SELECT 
+    name AS المدينة,
+    population AS عدد_السكان,
+    CASE 
+        WHEN population > 5000000 THEN 'كبيرة جداً'
+        WHEN population > 2000000 THEN 'كبيرة'
+        WHEN population > 1000000 THEN 'متوسطة'
+        ELSE 'صغيرة'
+    END AS التصنيف,
+    ROUND(population::numeric / 1000000, 2) AS السكان_بالمليون
+FROM cities
+WHERE population > 1000000
+ORDER BY population DESC
+LIMIT 10;</code></pre>
+            </div>
+
+            <h2>الخلاصة</h2>
+            <p>في هذه المحاضرة تعلمنا:</p>
+            <ul>
+                <li>أساسيات SQL وأنواع الأوامر (DDL, DML, DCL)</li>
+                <li>أوامر SELECT للاستعلام عن البيانات</li>
+                <li>أوامر INSERT لإدراج البيانات</li>
+                <li>أوامر UPDATE لتحديث البيانات</li>
+                <li>أوامر DELETE لحذف البيانات</li>
+                <li>الدوال المجمعة والنصية والرياضية</li>
+                <li>الاستعلامات المتداخلة</li>
+            </ul>
+
+            <p>في المحاضرة القادمة سنتعلم كيفية إنشاء الجداول والقيود بشكل تفصيلي.</p>
+        </div>
+
+        <div class="navigation">
+            <a href="02-installation.html" class="nav-link prev">← المحاضرة السابقة: تثبيت وإعداد PostgreSQL</a>
+            <a href="04-tables-constraints.html" class="nav-link next">المحاضرة التالية: إنشاء الجداول والقيود →</a>
+        </div>
+    </main>
+
+    <footer class="main-footer">
+        <div class="container">
+            <p>&copy; 2024 دورة PostgreSQL و PostGIS - م. ياسر المفعلاني</p>
+        </div>
+    </footer>
+
+    <script src="../../scripts/main.js"></script>
+</body>
+</html>
+

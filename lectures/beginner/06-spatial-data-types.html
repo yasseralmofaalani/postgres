@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>المحاضرة 06: أنواع البيانات الجغرافية - دورة PostgreSQL و PostGIS</title>
+    <link rel="stylesheet" href="../../styles/main.css">
+</head>
+<body>
+    <header class="main-header">
+        <div class="container">
+            <h1>دورة PostgreSQL و PostGIS الشاملة</h1>
+            <p class="instructor">مقدم الدورة: <strong>م. ياسر المفعلاني</strong></p>
+        </div>
+    </header>
+
+    <main class="lecture-content">
+        <div class="lecture-header">
+            <h1>المحاضرة 06: أنواع البيانات الجغرافية</h1>
+            <div class="lecture-meta">
+                <span>المستوى: المبتدئ</span>
+                <span>المدة: 90 دقيقة</span>
+            </div>
+        </div>
+
+        <div class="lecture-body">
+            <a href="../../index.html" class="back-to-index">← العودة إلى الفهرس</a>
+
+            <h2>نظرة عامة على أنواع البيانات الجغرافية</h2>
+            <p>
+                PostGIS يدعم أنواعًا متعددة من البيانات الجغرافية وفقًا لمعايير OGC. 
+                كل نوع مناسب لتمثيل أنواع مختلفة من الميزات الجغرافية.
+            </p>
+
+            <h2>أنواع البيانات البسيطة</h2>
+            <h3>1. POINT (النقطة)</h3>
+            <p>تمثل موقعًا واحدًا في الفضاء ببعدين (X, Y) أو ثلاثة أبعاد (X, Y, Z)</p>
+            <div class="code-block">
+                <div class="code-title">إنشاء واستخدام POINT</div>
+                <pre><code>-- إنشاء نقطة بسيطة
+SELECT ST_MakePoint(46.6753, 24.7136) AS point_2d;
+
+-- إنشاء نقطة ثلاثية الأبعاد
+SELECT ST_MakePoint(46.6753, 24.7136, 600) AS point_3d;
+
+-- إنشاء نقطة مع SRID
+SELECT ST_SetSRID(ST_MakePoint(46.6753, 24.7136), 4326) AS riyadh;
+
+-- استخراج الإحداثيات
+SELECT 
+    ST_X(ST_MakePoint(46.6753, 24.7136)) AS longitude,
+    ST_Y(ST_MakePoint(46.6753, 24.7136)) AS latitude;
+
+-- استخدام في جدول
+CREATE TABLE landmarks (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100),
+    location GEOMETRY(POINT, 4326)
+);</code></pre>
+            </div>
+
+            <h3>2. LINESTRING (الخط)</h3>
+            <p>تمثل سلسلة من النقاط المتصلة لتشكيل خط</p>
+            <div class="code-block">
+                <div class="code-title">إنشاء واستخدام LINESTRING</div>
+                <pre><code>-- إنشاء خط من نقطتين
+SELECT ST_MakeLine(
+    ST_MakePoint(46.6753, 24.7136),  -- الرياض
+    ST_MakePoint(39.1728, 21.4858)   -- جدة
+) AS route;
+
+-- إنشاء خط من عدة نقاط
+SELECT ST_MakeLine(ARRAY[
+    ST_MakePoint(46.6753, 24.7136),
+    ST_MakePoint(46.8000, 24.8000),
+    ST_MakePoint(39.1728, 21.4858)
+]) AS multi_point_route;
+
+-- استخدام WKT
+SELECT ST_GeomFromText(
+    'LINESTRING(46.6753 24.7136, 46.8000 24.8000, 39.1728 21.4858)', 
+    4326
+) AS route;
+
+-- حساب طول الخط
+SELECT 
+    ST_Length(
+        ST_Transform(
+            ST_GeomFromText('LINESTRING(46.6753 24.7136, 39.1728 21.4858)', 4326),
+            3857
+        )
+    ) / 1000 AS length_km;</code></pre>
+            </div>
+
+            <h3>3. POLYGON (المضلع)</h3>
+            <p>تمثل منطقة مغلقة محاطة بحلقة خارجية ويمكن أن تحتوي على ثقوب</p>
+            <div class="code-block">
+                <div class="code-title">إنشاء واستخدام POLYGON</div>
+                <pre><code>-- إنشاء مضلع بسيط (مربع)
+SELECT ST_GeomFromText(
+    'POLYGON((46.6 24.7, 46.7 24.7, 46.7 24.8, 46.6 24.8, 46.6 24.7))', 
+    4326
+) AS square;
+
+-- إنشاء مضلع مع ثقب
+SELECT ST_GeomFromText(
+    'POLYGON((
+        46.6 24.7, 46.7 24.7, 46.7 24.8, 46.6 24.8, 46.6 24.7
+    ), (
+        46.62 24.72, 46.68 24.72, 46.68 24.78, 46.62 24.78, 46.62 24.72
+    ))', 
+    4326
+) AS polygon_with_hole;
+
+-- حساب مساحة المضلع
+SELECT 
+    ST_Area(
+        ST_Transform(
+            ST_GeomFromText(
+                'POLYGON((46.6 24.7, 46.7 24.7, 46.7 24.8, 46.6 24.8, 46.6 24.7))', 
+                4326
+            ),
+            3857
+        )
+    ) / 1000000 AS area_sqkm;</code></pre>
+            </div>
+
+            <h2>أنواع البيانات المركبة</h2>
+            <h3>4. MULTIPOINT (نقاط متعددة)</h3>
+            <p>مجموعة من النقاط</p>
+            <div class="code-block">
+                <div class="code-title">إنشاء MULTIPOINT</div>
+                <pre><code>-- إنشاء نقاط متعددة
+SELECT ST_GeomFromText(
+    'MULTIPOINT((46.6753 24.7136), (39.1728 21.4858), (50.1033 26.4207))', 
+    4326
+) AS cities;
+
+-- أو باستخدام ST_Collect
+SELECT ST_Collect(ARRAY[
+    ST_MakePoint(46.6753, 24.7136),
+    ST_MakePoint(39.1728, 21.4858),
+    ST_MakePoint(50.1033, 26.4207)
+]) AS cities;</code></pre>
+            </div>
+
+            <h3>5. MULTILINESTRING (خطوط متعددة)</h3>
+            <p>مجموعة من الخطوط</p>
+            <div class="code-block">
+                <div class="code-title">إنشاء MULTILINESTRING</div>
+                <pre><code>-- إنشاء خطوط متعددة
+SELECT ST_GeomFromText(
+    'MULTILINESTRING((
+        46.6753 24.7136, 46.8000 24.8000
+    ), (
+        39.1728 21.4858, 39.3000 21.6000
+    ))', 
+    4326
+) AS roads;</code></pre>
+            </div>
+
+            <h3>6. MULTIPOLYGON (مضلعات متعددة)</h3>
+            <p>مجموعة من المضلعات</p>
+            <div class="code-block">
+                <div class="code-title">إنشاء MULTIPOLYGON</div>
+                <pre><code>-- إنشاء مضلعات متعددة
+SELECT ST_GeomFromText(
+    'MULTIPOLYGON((
+        ((46.6 24.7, 46.7 24.7, 46.7 24.8, 46.6 24.8, 46.6 24.7))
+    ), (
+        ((39.1 21.4, 39.2 21.4, 39.2 21.5, 39.1 21.5, 39.1 21.4))
+    ))', 
+    4326
+) AS regions;</code></pre>
+            </div>
+
+            <h3>7. GEOMETRYCOLLECTION (مجموعة هندسية)</h3>
+            <p>مجموعة من أي أنواع هندسية</p>
+            <div class="code-block">
+                <div class="code-title">إنشاء GEOMETRYCOLLECTION</div>
+                <pre><code>-- إنشاء مجموعة هندسية
+SELECT ST_GeomFromText(
+    'GEOMETRYCOLLECTION(
+        POINT(46.6753 24.7136),
+        LINESTRING(46.6753 24.7136, 39.1728 21.4858),
+        POLYGON((46.6 24.7, 46.7 24.7, 46.7 24.8, 46.6 24.8, 46.6 24.7))
+    )', 
+    4326
+) AS mixed_geometry;</code></pre>
+            </div>
+
+            <h2>البيانات ثلاثية الأبعاد</h2>
+            <div class="code-block">
+                <div class="code-title">البيانات ثلاثية الأبعاد</div>
+                <pre><code>-- إنشاء نقطة ثلاثية الأبعاد
+SELECT ST_MakePoint(46.6753, 24.7136, 600) AS point_3d;
+
+-- إنشاء خط ثلاثي الأبعاد
+SELECT ST_GeomFromText(
+    'LINESTRING Z (46.6753 24.7136 600, 39.1728 21.4858 50)', 
+    4326
+) AS line_3d;
+
+-- استخراج الإحداثي Z
+SELECT ST_Z(ST_MakePoint(46.6753, 24.7136, 600)) AS elevation;</code></pre>
+            </div>
+
+            <h2>الدوال للتحقق من نوع البيانات</h2>
+            <div class="code-block">
+                <div class="code-title">الدوال للتحقق من النوع</div>
+                <pre><code>-- التحقق من نوع الهندسة
+SELECT 
+    ST_GeometryType(ST_MakePoint(46.6753, 24.7136)) AS geom_type;
+
+-- التحقق من البعد
+SELECT ST_Dimension(ST_MakePoint(46.6753, 24.7136)) AS dimension;
+
+-- التحقق من عدد الأبعاد الإحداثية
+SELECT ST_NDims(ST_MakePoint(46.6753, 24.7136, 600)) AS num_dims;
+
+-- التحقق من نوع معين
+SELECT 
+    ST_IsValid(ST_MakePoint(46.6753, 24.7136)) AS is_valid,
+    ST_IsEmpty(ST_MakePoint(46.6753, 24.7136)) AS is_empty,
+    ST_IsSimple(ST_GeomFromText('LINESTRING(0 0, 1 1)')) AS is_simple;</code></pre>
+            </div>
+
+            <h2>إنشاء جداول بأنواع مختلفة</h2>
+            <div class="code-block">
+                <div class="code-title">مثال شامل: جداول بأنواع مختلفة</div>
+                <pre><code>-- جدول للنقاط (المدن)
+CREATE TABLE cities (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100),
+    location GEOMETRY(POINT, 4326)
+);
+
+-- جدول للخطوط (الطرق)
+CREATE TABLE roads (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(200),
+    road_type VARCHAR(50),
+    geometry GEOMETRY(LINESTRING, 4326)
+);
+
+-- جدول للمضلعات (المناطق)
+CREATE TABLE regions (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100),
+    boundary GEOMETRY(POLYGON, 4326)
+);
+
+-- جدول لأنواع متعددة (استخدام GEOMETRY العام)
+CREATE TABLE features (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100),
+    feature_type VARCHAR(50),  -- point, line, polygon
+    geometry GEOMETRY,  -- بدون تحديد النوع
+    CONSTRAINT check_type CHECK (
+        (feature_type = 'point' AND ST_GeometryType(geometry) = 'ST_Point') OR
+        (feature_type = 'line' AND ST_GeometryType(geometry) = 'ST_LineString') OR
+        (feature_type = 'polygon' AND ST_GeometryType(geometry) = 'ST_Polygon')
+    )
+);</code></pre>
+            </div>
+
+            <h2>التحويل بين الأنواع</h2>
+            <div class="code-block">
+                <div class="code-title">تحويل الأنواع</div>
+                <pre><code>-- تحويل MULTIPOINT إلى POINT
+SELECT 
+    ST_GeometryN(
+        ST_GeomFromText('MULTIPOINT((46.6753 24.7136), (39.1728 21.4858))', 4326),
+        1
+    ) AS first_point;
+
+-- تحويل POLYGON إلى LINESTRING (الحدود الخارجية)
+SELECT 
+    ST_Boundary(
+        ST_GeomFromText(
+            'POLYGON((46.6 24.7, 46.7 24.7, 46.7 24.8, 46.6 24.8, 46.6 24.7))', 
+            4326
+        )
+    ) AS boundary_line;
+
+-- تحويل LINESTRING إلى MULTIPOINT
+SELECT 
+    ST_Collect(
+        ST_StartPoint(geom),
+        ST_EndPoint(geom)
+    ) AS endpoints
+FROM (
+    SELECT ST_GeomFromText('LINESTRING(46.6753 24.7136, 39.1728 21.4858)', 4326) AS geom
+) AS line;</code></pre>
+            </div>
+
+            <h2>الدوال الهندسية الأساسية</h2>
+            <h3>ST_Envelope - المربع المحيط</h3>
+            <div class="code-block">
+                <div class="code-title">المربع المحيط</div>
+                <pre><code>-- الحصول على المربع المحيط
+SELECT 
+    ST_Envelope(
+        ST_GeomFromText(
+            'POLYGON((46.6 24.7, 46.7 24.7, 46.7 24.8, 46.6 24.8, 46.6 24.7))', 
+            4326
+        )
+    ) AS bounding_box;</code></pre>
+            </div>
+
+            <h3>ST_Centroid - النقطة المركزية</h3>
+            <div class="code-block">
+                <div class="code-title">النقطة المركزية</div>
+                <pre><code>-- حساب النقطة المركزية
+SELECT 
+    ST_Centroid(
+        ST_GeomFromText(
+            'POLYGON((46.6 24.7, 46.7 24.7, 46.7 24.8, 46.6 24.8, 46.6 24.7))', 
+            4326
+        )
+    ) AS centroid;</code></pre>
+            </div>
+
+            <h3>ST_Buffer - إنشاء منطقة عازلة</h3>
+            <div class="code-block">
+                <div class="code-title">المنطقة العازلة</div>
+                <pre><code>-- إنشاء منطقة عازلة حول نقطة (بالمتر)
+SELECT 
+    ST_Buffer(
+        ST_Transform(
+            ST_MakePoint(46.6753, 24.7136),
+            3857
+        ),
+        5000  -- 5 كيلومتر
+    ) AS buffer_zone;</code></pre>
+            </div>
+
+            <h2>مثال شامل: قاعدة بيانات جغرافية متكاملة</h2>
+            <div class="code-block">
+                <div class="code-title">مثال شامل</div>
+                <pre><code>-- إنشاء قاعدة بيانات
+CREATE DATABASE spatial_example;
+\c spatial_example
+CREATE EXTENSION postgis;
+
+-- جدول المدن (نقاط)
+CREATE TABLE cities (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    population INTEGER,
+    location GEOMETRY(POINT, 4326)
+);
+
+-- جدول الطرق (خطوط)
+CREATE TABLE roads (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(200),
+    road_type VARCHAR(50),
+    length_km DECIMAL(10, 2),
+    geometry GEOMETRY(LINESTRING, 4326)
+);
+
+-- جدول المناطق (مضلعات)
+CREATE TABLE administrative_regions (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    code VARCHAR(20),
+    area_km2 DECIMAL(12, 2),
+    boundary GEOMETRY(POLYGON, 4326)
+);
+
+-- إدراج بيانات تجريبية
+INSERT INTO cities (name, population, location) VALUES
+    ('الرياض', 7700000, ST_SetSRID(ST_MakePoint(46.6753, 24.7136), 4326)),
+    ('جدة', 4700000, ST_SetSRID(ST_MakePoint(39.1728, 21.4858), 4326)),
+    ('الدمام', 1200000, ST_SetSRID(ST_MakePoint(50.1033, 26.4207), 4326));
+
+INSERT INTO roads (name, road_type, geometry) VALUES
+    ('طريق الرياض-جدة', 'highway',
+     ST_GeomFromText('LINESTRING(46.6753 24.7136, 39.1728 21.4858)', 4326));
+
+-- استعلامات
+SELECT 
+    name,
+    ST_AsText(location) AS location,
+    ST_X(location) AS longitude,
+    ST_Y(location) AS latitude
+FROM cities;
+
+SELECT 
+    name,
+    ST_Length(ST_Transform(geometry, 3857)) / 1000 AS length_km
+FROM roads;</code></pre>
+            </div>
+
+            <h2>الخلاصة</h2>
+            <p>في هذه المحاضرة تعلمنا:</p>
+            <ul>
+                <li>أنواع البيانات الجغرافية البسيطة (Point, LineString, Polygon)</li>
+                <li>أنواع البيانات المركبة (MultiPoint, MultiLineString, MultiPolygon)</li>
+                <li>البيانات ثلاثية الأبعاد</li>
+                <li>الدوال للتحقق من نوع البيانات</li>
+                <li>التحويل بين الأنواع المختلفة</li>
+                <li>الدوال الهندسية الأساسية</li>
+            </ul>
+
+            <p>في المحاضرة القادمة سنتعلم كيفية استيراد البيانات الجغرافية من مصادر مختلفة.</p>
+        </div>
+
+        <div class="navigation">
+            <a href="05-postgis-intro.html" class="nav-link prev">← المحاضرة السابقة: مقدمة في PostGIS</a>
+            <a href="07-importing-spatial-data.html" class="nav-link next">المحاضرة التالية: استيراد البيانات الجغرافية →</a>
+        </div>
+    </main>
+
+    <footer class="main-footer">
+        <div class="container">
+            <p>&copy; 2024 دورة PostgreSQL و PostGIS - م. ياسر المفعلاني</p>
+        </div>
+    </footer>
+
+    <script src="../../scripts/main.js"></script>
+</body>
+</html>
+

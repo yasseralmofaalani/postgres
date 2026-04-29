@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>المحاضرة 04: إنشاء الجداول والقيود - دورة PostgreSQL و PostGIS</title>
+    <link rel="stylesheet" href="../../styles/main.css">
+</head>
+<body>
+    <header class="main-header">
+        <div class="container">
+            <h1>دورة PostgreSQL و PostGIS الشاملة</h1>
+            <p class="instructor">مقدم الدورة: <strong>م. ياسر المفعلاني</strong></p>
+        </div>
+    </header>
+
+    <main class="lecture-content">
+        <div class="lecture-header">
+            <h1>المحاضرة 04: إنشاء الجداول والقيود</h1>
+            <div class="lecture-meta">
+                <span>المستوى: المبتدئ</span>
+                <span>المدة: 75 دقيقة</span>
+            </div>
+        </div>
+
+        <div class="lecture-body">
+            <a href="../../index.html" class="back-to-index">← العودة إلى الفهرس</a>
+
+            <h2>أنواع البيانات في PostgreSQL</h2>
+            <h3>الأنواع النصية</h3>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>النوع</th>
+                            <th>الوصف</th>
+                            <th>الحجم</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>CHAR(n)</td>
+                            <td>نص بطول ثابت</td>
+                            <td>1-255 حرف</td>
+                        </tr>
+                        <tr>
+                            <td>VARCHAR(n)</td>
+                            <td>نص بطول متغير</td>
+                            <td>حتى 1GB</td>
+                        </tr>
+                        <tr>
+                            <td>TEXT</td>
+                            <td>نص بدون حد أقصى</td>
+                            <td>غير محدود</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h3>الأنواع الرقمية</h3>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>النوع</th>
+                            <th>الوصف</th>
+                            <th>النطاق</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>SMALLINT</td>
+                            <td>عدد صحيح صغير</td>
+                            <td>-32,768 إلى 32,767</td>
+                        </tr>
+                        <tr>
+                            <td>INTEGER أو INT</td>
+                            <td>عدد صحيح</td>
+                            <td>-2,147,483,648 إلى 2,147,483,647</td>
+                        </tr>
+                        <tr>
+                            <td>BIGINT</td>
+                            <td>عدد صحيح كبير</td>
+                            <td>-9,223,372,036,854,775,808 إلى 9,223,372,036,854,775,807</td>
+                        </tr>
+                        <tr>
+                            <td>DECIMAL(p,s)</td>
+                            <td>عدد عشري دقيق</td>
+                            <td>حسب الدقة المحددة</td>
+                        </tr>
+                        <tr>
+                            <td>NUMERIC(p,s)</td>
+                            <td>مثل DECIMAL</td>
+                            <td>حسب الدقة المحددة</td>
+                        </tr>
+                        <tr>
+                            <td>REAL</td>
+                            <td>عدد فاصلة عائمة</td>
+                            <td>6 خانات عشرية</td>
+                        </tr>
+                        <tr>
+                            <td>DOUBLE PRECISION</td>
+                            <td>عدد فاصلة عائمة مزدوج</td>
+                            <td>15 خانة عشرية</td>
+                        </tr>
+                        <tr>
+                            <td>SERIAL</td>
+                            <td>عدد تلقائي متزايد</td>
+                            <td>1 إلى 2,147,483,647</td>
+                        </tr>
+                        <tr>
+                            <td>BIGSERIAL</td>
+                            <td>عدد تلقائي كبير</td>
+                            <td>1 إلى 9,223,372,036,854,775,807</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h3>أنواع التاريخ والوقت</h3>
+            <div class="code-block">
+                <div class="code-title">أنواع التاريخ والوقت</div>
+                <pre><code>DATE              -- التاريخ فقط (YYYY-MM-DD)
+TIME              -- الوقت فقط (HH:MM:SS)
+TIMESTAMP         -- التاريخ والوقت (YYYY-MM-DD HH:MM:SS)
+TIMESTAMPTZ       -- التاريخ والوقت مع المنطقة الزمنية
+INTERVAL          -- الفترة الزمنية</code></pre>
+            </div>
+
+            <h3>أنواع أخرى</h3>
+            <div class="code-block">
+                <div class="code-title">أنواع بيانات إضافية</div>
+                <pre><code>BOOLEAN           -- true/false
+JSON              -- بيانات JSON
+JSONB             -- JSON ثنائي (أسرع)
+ARRAY             -- مصفوفة
+UUID              -- معرف فريد عالمي
+BYTEA             -- بيانات ثنائية</code></pre>
+            </div>
+
+            <h2>إنشاء الجداول</h2>
+            <h3>إنشاء جدول بسيط</h3>
+            <div class="code-block">
+                <div class="code-title">إنشاء جدول بسيط</div>
+                <pre><code>CREATE TABLE cities (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    population INTEGER,
+    area_km2 DECIMAL(10, 2),
+    is_capital BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);</code></pre>
+            </div>
+
+            <h3>إنشاء جدول مع قيود متعددة</h3>
+            <div class="code-block">
+                <div class="code-title">جدول مع قيود</div>
+                <pre><code>CREATE TABLE employees (
+    id SERIAL PRIMARY KEY,
+    employee_code VARCHAR(20) UNIQUE NOT NULL,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    phone VARCHAR(20),
+    salary DECIMAL(10, 2) CHECK (salary > 0),
+    department_id INTEGER NOT NULL,
+    hire_date DATE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);</code></pre>
+            </div>
+
+            <h2>القيود (Constraints)</h2>
+            <h3>1. PRIMARY KEY (المفتاح الأساسي)</h3>
+            <div class="code-block">
+                <div class="code-title">المفتاح الأساسي</div>
+                <pre><code>-- طريقة 1: في تعريف العمود
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(50)
+);
+
+-- طريقة 2: كقيد منفصل
+CREATE TABLE users (
+    id SERIAL,
+    username VARCHAR(50),
+    PRIMARY KEY (id)
+);
+
+-- مفتاح مركب (Composite Key)
+CREATE TABLE order_items (
+    order_id INTEGER,
+    product_id INTEGER,
+    quantity INTEGER,
+    PRIMARY KEY (order_id, product_id)
+);</code></pre>
+            </div>
+
+            <h3>2. FOREIGN KEY (المفتاح الخارجي)</h3>
+            <div class="code-block">
+                <div class="code-title">المفتاح الخارجي</div>
+                <pre><code>-- إنشاء الجدول المرجعي أولاً
+CREATE TABLE departments (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL
+);
+
+-- إنشاء جدول مع مفتاح خارجي
+CREATE TABLE employees (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    department_id INTEGER,
+    FOREIGN KEY (department_id) REFERENCES departments(id)
+);
+
+-- مع خيارات ON DELETE و ON UPDATE
+CREATE TABLE employees (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    department_id INTEGER,
+    FOREIGN KEY (department_id) 
+        REFERENCES departments(id)
+        ON DELETE CASCADE      -- حذف تلقائي عند حذف القسم
+        ON UPDATE CASCADE      -- تحديث تلقائي عند تحديث القسم
+);
+
+-- خيارات ON DELETE:
+-- CASCADE: حذف تلقائي
+-- SET NULL: تعيين NULL
+-- SET DEFAULT: تعيين القيمة الافتراضية
+-- RESTRICT: منع الحذف (الافتراضي)
+-- NO ACTION: نفس RESTRICT</code></pre>
+            </div>
+
+            <h3>3. UNIQUE (فريد)</h3>
+            <div class="code-block">
+                <div class="code-title">قيد UNIQUE</div>
+                <pre><code>-- على عمود واحد
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    username VARCHAR(50) UNIQUE
+);
+
+-- على عدة أعمدة
+CREATE TABLE user_roles (
+    user_id INTEGER,
+    role_id INTEGER,
+    UNIQUE (user_id, role_id)
+);</code></pre>
+            </div>
+
+            <h3>4. NOT NULL (غير فارغ)</h3>
+            <div class="code-block">
+                <div class="code-title">قيد NOT NULL</div>
+                <pre><code>CREATE TABLE products (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    price DECIMAL(10, 2) NOT NULL,
+    description TEXT,  -- يمكن أن يكون NULL
+    stock_quantity INTEGER NOT NULL DEFAULT 0
+);</code></pre>
+            </div>
+
+            <h3>5. CHECK (التحقق)</h3>
+            <div class="code-block">
+                <div class="code-title">قيد CHECK</div>
+                <pre><code>-- قيد على عمود واحد
+CREATE TABLE products (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    price DECIMAL(10, 2) CHECK (price > 0),
+    discount_percentage INTEGER CHECK (discount_percentage >= 0 AND discount_percentage <= 100)
+);
+
+-- قيد على عدة أعمدة
+CREATE TABLE reservations (
+    id SERIAL PRIMARY KEY,
+    check_in DATE NOT NULL,
+    check_out DATE NOT NULL,
+    CHECK (check_out > check_in)
+);
+
+-- قيد معقد
+CREATE TABLE employees (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    salary DECIMAL(10, 2),
+    bonus DECIMAL(10, 2),
+    CHECK (salary + COALESCE(bonus, 0) > 0)
+);</code></pre>
+            </div>
+
+            <h3>6. DEFAULT (القيمة الافتراضية)</h3>
+            <div class="code-block">
+                <div class="code-title">القيمة الافتراضية</div>
+                <pre><code>CREATE TABLE orders (
+    id SERIAL PRIMARY KEY,
+    order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(20) DEFAULT 'pending',
+    total_amount DECIMAL(10, 2) DEFAULT 0,
+    is_active BOOLEAN DEFAULT TRUE
+);</code></pre>
+            </div>
+
+            <h2>تعديل الجداول (ALTER TABLE)</h2>
+            <h3>إضافة عمود</h3>
+            <div class="code-block">
+                <div class="code-title">إضافة عمود</div>
+                <pre><code>-- إضافة عمود بسيط
+ALTER TABLE cities ADD COLUMN country VARCHAR(100);
+
+-- إضافة عمود مع قيود
+ALTER TABLE cities 
+ADD COLUMN region_id INTEGER 
+NOT NULL DEFAULT 1;
+
+-- إضافة عمود مع قيد خارجي
+ALTER TABLE cities 
+ADD COLUMN region_id INTEGER,
+ADD CONSTRAINT fk_region 
+FOREIGN KEY (region_id) REFERENCES regions(id);</code></pre>
+            </div>
+
+            <h3>تعديل عمود</h3>
+            <div class="code-block">
+                <div class="code-title">تعديل عمود</div>
+                <pre><code>-- تغيير نوع البيانات
+ALTER TABLE cities ALTER COLUMN population TYPE BIGINT;
+
+-- تغيير القيمة الافتراضية
+ALTER TABLE cities ALTER COLUMN is_capital SET DEFAULT FALSE;
+
+-- إضافة قيد NOT NULL
+ALTER TABLE cities ALTER COLUMN name SET NOT NULL;
+
+-- إزالة قيد NOT NULL
+ALTER TABLE cities ALTER COLUMN description DROP NOT NULL;
+
+-- إعادة تسمية العمود
+ALTER TABLE cities RENAME COLUMN name TO city_name;</code></pre>
+            </div>
+
+            <h3>حذف عمود</h3>
+            <div class="code-block">
+                <div class="code-title">حذف عمود</div>
+                <pre><code>-- حذف عمود
+ALTER TABLE cities DROP COLUMN description;
+
+-- حذف عمود مع قيد (CASCADE)
+ALTER TABLE cities DROP COLUMN region_id CASCADE;</code></pre>
+            </div>
+
+            <h3>إضافة وحذف القيود</h3>
+            <div class="code-block">
+                <div class="code-title">إدارة القيود</div>
+                <pre><code>-- إضافة قيد
+ALTER TABLE cities 
+ADD CONSTRAINT chk_population 
+CHECK (population > 0);
+
+-- إضافة مفتاح خارجي
+ALTER TABLE cities 
+ADD CONSTRAINT fk_region 
+FOREIGN KEY (region_id) REFERENCES regions(id);
+
+-- إزالة قيد
+ALTER TABLE cities DROP CONSTRAINT chk_population;
+
+-- إعادة تسمية قيد
+ALTER TABLE cities RENAME CONSTRAINT old_name TO new_name;</code></pre>
+            </div>
+
+            <h2>حذف الجداول</h2>
+            <div class="code-block">
+                <div class="code-title">حذف الجداول</div>
+                <pre><code>-- حذف جدول (يجب أن يكون فارغاً أو بدون قيود)
+DROP TABLE cities;
+
+-- حذف مع CASCADE (يحذف الجداول المرتبطة)
+DROP TABLE regions CASCADE;
+
+-- حذف فقط إذا كان موجوداً
+DROP TABLE IF EXISTS cities;</code></pre>
+            </div>
+
+            <h2>مثال شامل: قاعدة بيانات متكاملة</h2>
+            <div class="code-block">
+                <div class="code-title">مثال شامل</div>
+                <pre><code>-- إنشاء قاعدة بيانات
+CREATE DATABASE company_db;
+
+-- الاتصال بقاعدة البيانات
+\c company_db
+
+-- جدول الأقسام
+CREATE TABLE departments (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    budget DECIMAL(12, 2) CHECK (budget >= 0),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- جدول الموظفين
+CREATE TABLE employees (
+    id SERIAL PRIMARY KEY,
+    employee_number VARCHAR(20) UNIQUE NOT NULL,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    phone VARCHAR(20),
+    salary DECIMAL(10, 2) NOT NULL CHECK (salary > 0),
+    department_id INTEGER NOT NULL,
+    manager_id INTEGER,
+    hire_date DATE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE RESTRICT,
+    FOREIGN KEY (manager_id) REFERENCES employees(id) ON DELETE SET NULL,
+    
+    CONSTRAINT chk_email_format CHECK (email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$')
+);
+
+-- جدول المشاريع
+CREATE TABLE projects (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    start_date DATE NOT NULL,
+    end_date DATE,
+    budget DECIMAL(12, 2) CHECK (budget >= 0),
+    status VARCHAR(20) DEFAULT 'planning' CHECK (status IN ('planning', 'active', 'completed', 'cancelled')),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    CHECK (end_date IS NULL OR end_date >= start_date)
+);
+
+-- جدول ربط الموظفين بالمشاريع
+CREATE TABLE employee_projects (
+    employee_id INTEGER NOT NULL,
+    project_id INTEGER NOT NULL,
+    role VARCHAR(50) NOT NULL,
+    hours_allocated INTEGER CHECK (hours_allocated > 0),
+    assigned_date DATE DEFAULT CURRENT_DATE,
+    
+    PRIMARY KEY (employee_id, project_id),
+    FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
+-- إنشاء فهرس لتحسين الأداء
+CREATE INDEX idx_employees_department ON employees(department_id);
+CREATE INDEX idx_employees_email ON employees(email);
+CREATE INDEX idx_projects_status ON projects(status);</code></pre>
+            </div>
+
+            <h2>أفضل الممارسات</h2>
+            <ul>
+                <li><strong>استخدم أسماء واضحة:</strong> اختر أسماء جدول وأعمدة وصفية</li>
+                <li><strong>استخدم PRIMARY KEY:</strong> كل جدول يجب أن يحتوي على مفتاح أساسي</li>
+                <li><strong>استخدم FOREIGN KEY:</strong> للحفاظ على تكامل البيانات</li>
+                <li><strong>استخدم NOT NULL:</strong> للأعمدة المطلوبة</li>
+                <li><strong>استخدم CHECK:</strong> للتحقق من صحة البيانات</li>
+                <li><strong>استخدم DEFAULT:</strong> للقيم الشائعة</li>
+                <li><strong>استخدم INDEX:</strong> على الأعمدة المستخدمة في WHERE و JOIN</li>
+            </ul>
+
+            <h2>الخلاصة</h2>
+            <p>في هذه المحاضرة تعلمنا:</p>
+            <ul>
+                <li>أنواع البيانات المختلفة في PostgreSQL</li>
+                <li>كيفية إنشاء الجداول</li>
+                <li>أنواع القيود وكيفية استخدامها</li>
+                <li>تعديل وحذف الجداول والأعمدة</li>
+                <li>أفضل الممارسات في تصميم قواعد البيانات</li>
+            </ul>
+
+            <p>في المحاضرة القادمة سنتعلم مقدمة في PostGIS وأنواع البيانات الجغرافية.</p>
+        </div>
+
+        <div class="navigation">
+            <a href="03-basic-sql.html" class="nav-link prev">← المحاضرة السابقة: أساسيات SQL</a>
+            <a href="05-postgis-intro.html" class="nav-link next">المحاضرة التالية: مقدمة في PostGIS →</a>
+        </div>
+    </main>
+
+    <footer class="main-footer">
+        <div class="container">
+            <p>&copy; 2024 دورة PostgreSQL و PostGIS - م. ياسر المفعلاني</p>
+        </div>
+    </footer>
+
+    <script src="../../scripts/main.js"></script>
+</body>
+</html>
+

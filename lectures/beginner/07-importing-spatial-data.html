@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>المحاضرة 07: استيراد البيانات الجغرافية - دورة PostgreSQL و PostGIS</title>
+    <link rel="stylesheet" href="../../styles/main.css">
+</head>
+<body>
+    <header class="main-header">
+        <div class="container">
+            <h1>دورة PostgreSQL و PostGIS الشاملة</h1>
+            <p class="instructor">مقدم الدورة: <strong>م. ياسر المفعلاني</strong></p>
+        </div>
+    </header>
+
+    <main class="lecture-content">
+        <div class="lecture-header">
+            <h1>المحاضرة 07: استيراد البيانات الجغرافية</h1>
+            <div class="lecture-meta">
+                <span>المستوى: المبتدئ</span>
+                <span>المدة: 75 دقيقة</span>
+            </div>
+        </div>
+
+        <div class="lecture-body">
+            <a href="../../index.html" class="back-to-index">← العودة إلى الفهرس</a>
+
+            <h2>مقدمة</h2>
+            <p>
+                في هذه المحاضرة سنتعلم كيفية استيراد البيانات الجغرافية من مصادر مختلفة 
+                إلى PostgreSQL/PostGIS. البيانات الجغرافية تأتي بأشكال متعددة مثل Shapefile، 
+                GeoJSON، KML، وغيرها.
+            </p>
+
+            <h2>أدوات الاستيراد</h2>
+            <h3>1. shp2pgsql (لـ Shapefile)</h3>
+            <p>أداة سطر الأوامر لاستيراد ملفات Shapefile</p>
+            <div class="code-block">
+                <div class="code-title">استخدام shp2pgsql</div>
+                <pre><code># تثبيت PostGIS (يأتي مع shp2pgsql)
+# على Windows: موجود في مجلد bin
+# على Linux: sudo apt install postgis
+# على macOS: brew install postgis
+
+# عرض المساعدة
+shp2pgsql --help
+
+# استيراد Shapefile
+# الصيغة: shp2pgsql [options] shapefile [schema.]table
+
+# مثال بسيط
+shp2pgsql -s 4326 -I cities.shp public.cities | psql -U postgres -d mydb
+
+# الخيارات:
+# -s SRID: تحديد نظام الإحداثيات
+# -I: إنشاء فهرس مكاني
+# -c: إنشاء جدول جديد (افتراضي)
+# -a: إضافة إلى جدول موجود
+# -d: حذف الجدول وإعادة إنشائه
+# -p: تحضير فقط (لا استيراد)
+# -g geometry_column: اسم عمود الهندسة (افتراضي: geom)
+# -D: استخدام dump mode (أسرع للبيانات الكبيرة)</code></pre>
+            </div>
+
+            <h3>2. ogr2ogr (لعدة تنسيقات)</h3>
+            <p>أداة قوية لتحويل البيانات الجغرافية بين تنسيقات مختلفة</p>
+            <div class="code-block">
+                <div class="code-title">استخدام ogr2ogr</div>
+                <pre><code># تثبيت GDAL/OGR
+# Windows: تحميل من gdal.org
+# Linux: sudo apt install gdal-bin
+# macOS: brew install gdal
+
+# استيراد Shapefile
+ogr2ogr -f "PostgreSQL" PG:"host=localhost user=postgres dbname=mydb password=mypass" \
+    cities.shp -nln cities -lco GEOMETRY_NAME=geometry
+
+# استيراد GeoJSON
+ogr2ogr -f "PostgreSQL" PG:"host=localhost user=postgres dbname=mydb" \
+    cities.geojson -nln cities
+
+# استيراد KML
+ogr2ogr -f "PostgreSQL" PG:"host=localhost user=postgres dbname=mydb" \
+    cities.kml -nln cities
+
+# الخيارات:
+# -f: تنسيق الإخراج
+# -nln: اسم الجدول
+# -lco: خيارات طبقة
+# -overwrite: الكتابة فوق الجدول الموجود
+# -append: إضافة إلى جدول موجود
+# -update: تحديث جدول موجود</code></pre>
+            </div>
+
+            <h2>استيراد Shapefile</h2>
+            <h3>الطريقة 1: استخدام shp2pgsql</h3>
+            <div class="code-block">
+                <div class="code-title">استيراد Shapefile كامل</div>
+                <pre><code># الخطوة 1: إنشاء ملف SQL
+shp2pgsql -s 4326 -I -c cities.shp public.cities > cities.sql
+
+# الخطوة 2: تنفيذ ملف SQL
+psql -U postgres -d mydb -f cities.sql
+
+# أو في سطر واحد
+shp2pgsql -s 4326 -I -c cities.shp public.cities | psql -U postgres -d mydb
+
+# استيراد مع تحديد نظام إحداثيات مختلف
+shp2pgsql -s 32637 -I -c cities.shp public.cities | psql -U postgres -d mydb
+
+# استيراد مع تغيير اسم عمود الهندسة
+shp2pgsql -s 4326 -I -g location cities.shp public.cities | psql -U postgres -d mydb</code></pre>
+            </div>
+
+            <h3>الطريقة 2: استخدام ogr2ogr</h3>
+            <div class="code-block">
+                <div class="code-title">استيراد Shapefile باستخدام ogr2ogr</div>
+                <pre><code># استيراد بسيط
+ogr2ogr -f "PostgreSQL" \
+    PG:"host=localhost port=5432 user=postgres dbname=mydb password=mypass" \
+    cities.shp \
+    -nln cities \
+    -lco GEOMETRY_NAME=geometry \
+    -lco FID=id
+
+# استيراد مع تحويل نظام الإحداثيات
+ogr2ogr -f "PostgreSQL" \
+    PG:"host=localhost user=postgres dbname=mydb" \
+    cities.shp \
+    -t_srs EPSG:4326 \
+    -nln cities
+
+# استيراد مع خيارات متقدمة
+ogr2ogr -f "PostgreSQL" \
+    PG:"host=localhost user=postgres dbname=mydb" \
+    cities.shp \
+    -nln cities \
+    -overwrite \
+    -lco SPATIAL_INDEX=GIST \
+    -lco GEOMETRY_NAME=geometry</code></pre>
+            </div>
+
+            <h2>استيراد GeoJSON</h2>
+            <div class="code-block">
+                <div class="code-title">استيراد GeoJSON</div>
+                <pre><code># استخدام ogr2ogr
+ogr2ogr -f "PostgreSQL" \
+    PG:"host=localhost user=postgres dbname=mydb" \
+    cities.geojson \
+    -nln cities
+
+# استيراد من URL
+ogr2ogr -f "PostgreSQL" \
+    PG:"host=localhost user=postgres dbname=mydb" \
+    "https://example.com/data.geojson" \
+    -nln cities
+
+# استيراد مع تحديد نظام إحداثيات
+ogr2ogr -f "PostgreSQL" \
+    PG:"host=localhost user=postgres dbname=mydb" \
+    cities.geojson \
+    -t_srs EPSG:4326 \
+    -nln cities</code></pre>
+            </div>
+
+            <h2>استيراد KML</h2>
+            <div class="code-block">
+                <div class="code-title">استيراد KML</div>
+                <pre><code># استيراد ملف KML
+ogr2ogr -f "PostgreSQL" \
+    PG:"host=localhost user=postgres dbname=mydb" \
+    cities.kml \
+    -nln cities
+
+# استيراد من Google Earth
+ogr2ogr -f "PostgreSQL" \
+    PG:"host=localhost user=postgres dbname=mydb" \
+    "https://maps.google.com/maps/ms?output=kml&msa=0&msid=..." \
+    -nln cities</code></pre>
+            </div>
+
+            <h2>استيراد CSV مع إحداثيات</h2>
+            <div class="code-block">
+                <div class="code-title">استيراد CSV وتحويله إلى بيانات جغرافية</div>
+                <pre><code>-- إنشاء جدول من CSV
+CREATE TABLE cities_csv (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100),
+    longitude DECIMAL(10, 7),
+    latitude DECIMAL(10, 7),
+    population INTEGER
+);
+
+-- نسخ البيانات من CSV
+COPY cities_csv(name, longitude, latitude, population)
+FROM '/path/to/cities.csv'
+DELIMITER ','
+CSV HEADER;
+
+-- تحويل إلى بيانات جغرافية
+ALTER TABLE cities_csv 
+ADD COLUMN location GEOMETRY(POINT, 4326);
+
+UPDATE cities_csv 
+SET location = ST_SetSRID(
+    ST_MakePoint(longitude, latitude), 
+    4326
+);
+
+-- إنشاء فهرس مكاني
+CREATE INDEX idx_cities_csv_location ON cities_csv USING GIST(location);
+
+-- حذف الأعمدة المؤقتة (اختياري)
+ALTER TABLE cities_csv DROP COLUMN longitude, DROP COLUMN latitude;</code></pre>
+            </div>
+
+            <h2>استيراد البيانات النقطية (Raster)</h2>
+            <div class="code-block">
+                <div class="code-title">استيراد البيانات النقطية</div>
+                <pre><code>-- تثبيت امتداد raster
+CREATE EXTENSION IF NOT EXISTS postgis_raster;
+
+-- استخدام raster2pgsql
+# إنشاء ملف SQL
+raster2pgsql -s 4326 -I -C -M elevation.tif -F public.elevation > elevation.sql
+
+# تنفيذ
+psql -U postgres -d mydb -f elevation.sql
+
+# أو في سطر واحد
+raster2pgsql -s 4326 -I -C -M elevation.tif -F public.elevation | \
+    psql -U postgres -d mydb
+
+# الخيارات:
+# -s: SRID
+# -I: إنشاء فهرس
+# -C: إضافة قيود
+# -M: تحسين الذاكرة
+# -F: إضافة عمود اسم الملف
+# -t: حجم البلاط (tile size)</code></pre>
+            </div>
+
+            <h2>التحقق من البيانات المستوردة</h2>
+            <div class="code-block">
+                <div class="code-title">التحقق من البيانات</div>
+                <pre><code>-- التحقق من عدد الصفوف
+SELECT COUNT(*) FROM cities;
+
+-- التحقق من نظام الإحداثيات
+SELECT DISTINCT ST_SRID(geometry) FROM cities;
+
+-- التحقق من نوع البيانات
+SELECT DISTINCT ST_GeometryType(geometry) FROM cities;
+
+-- التحقق من صحة البيانات
+SELECT 
+    COUNT(*) AS total,
+    SUM(CASE WHEN ST_IsValid(geometry) THEN 1 ELSE 0 END) AS valid,
+    SUM(CASE WHEN NOT ST_IsValid(geometry) THEN 1 ELSE 0 END) AS invalid
+FROM cities;
+
+-- عرض عينة من البيانات
+SELECT 
+    name,
+    ST_AsText(geometry) AS geometry_wkt,
+    ST_X(ST_Centroid(geometry)) AS centroid_x,
+    ST_Y(ST_Centroid(geometry)) AS centroid_y
+FROM cities
+LIMIT 5;
+
+-- التحقق من الفهارس
+SELECT 
+    tablename,
+    indexname,
+    indexdef
+FROM pg_indexes
+WHERE tablename = 'cities';</code></pre>
+            </div>
+
+            <h2>إصلاح البيانات غير الصالحة</h2>
+            <div class="code-block">
+                <div class="code-title">إصلاح البيانات</div>
+                <pre><code>-- العثور على البيانات غير الصالحة
+SELECT id, name, ST_IsValidReason(geometry) AS reason
+FROM cities
+WHERE NOT ST_IsValid(geometry);
+
+-- إصلاح البيانات
+UPDATE cities
+SET geometry = ST_MakeValid(geometry)
+WHERE NOT ST_IsValid(geometry);
+
+-- التحقق مرة أخرى
+SELECT COUNT(*) 
+FROM cities 
+WHERE NOT ST_IsValid(geometry);</code></pre>
+            </div>
+
+            <h2>مثال شامل: استيراد بيانات متعددة</h2>
+            <div class="code-block">
+                <div class="code-title">مثال شامل</div>
+                <pre><code>-- إنشاء قاعدة بيانات
+CREATE DATABASE saudi_arabia_gis;
+\c saudi_arabia_gis
+CREATE EXTENSION postgis;
+
+-- 1. استيراد المدن (Shapefile)
+shp2pgsql -s 4326 -I -c cities.shp public.cities | \
+    psql -U postgres -d saudi_arabia_gis
+
+-- 2. استيراد الطرق (GeoJSON)
+ogr2ogr -f "PostgreSQL" \
+    PG:"host=localhost user=postgres dbname=saudi_arabia_gis" \
+    roads.geojson \
+    -nln roads
+
+-- 3. استيراد المناطق الإدارية (KML)
+ogr2ogr -f "PostgreSQL" \
+    PG:"host=localhost user=postgres dbname=saudi_arabia_gis" \
+    regions.kml \
+    -nln regions
+
+-- 4. استيراد بيانات CSV
+CREATE TABLE landmarks (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100),
+    longitude DECIMAL(10, 7),
+    latitude DECIMAL(10, 7),
+    category VARCHAR(50)
+);
+
+COPY landmarks(name, longitude, latitude, category)
+FROM '/path/to/landmarks.csv'
+DELIMITER ','
+CSV HEADER;
+
+ALTER TABLE landmarks 
+ADD COLUMN location GEOMETRY(POINT, 4326);
+
+UPDATE landmarks 
+SET location = ST_SetSRID(ST_MakePoint(longitude, latitude), 4326);
+
+CREATE INDEX idx_landmarks_location ON landmarks USING GIST(location);
+
+-- التحقق من جميع البيانات
+SELECT 
+    'cities' AS table_name,
+    COUNT(*) AS row_count,
+    ST_GeometryType(geometry) AS geom_type
+FROM cities
+UNION ALL
+SELECT 
+    'roads',
+    COUNT(*),
+    ST_GeometryType(geometry)
+FROM roads
+UNION ALL
+SELECT 
+    'regions',
+    COUNT(*),
+    ST_GeometryType(geometry)
+FROM regions
+UNION ALL
+SELECT 
+    'landmarks',
+    COUNT(*),
+    ST_GeometryType(location)
+FROM landmarks;</code></pre>
+            </div>
+
+            <h2>أفضل الممارسات</h2>
+            <ul>
+                <li><strong>التحقق من نظام الإحداثيات:</strong> تأكد من معرفة SRID للبيانات المستوردة</li>
+                <li><strong>إنشاء الفهارس:</strong> استخدم -I مع shp2pgsql لإنشاء فهرس مكاني</li>
+                <li><strong>التحقق من صحة البيانات:</strong> تحقق من صحة البيانات بعد الاستيراد</li>
+                <li><strong>النسخ الاحتياطي:</strong> احتفظ بنسخة من الملفات الأصلية</li>
+                <li><strong>التحسين:</strong> استخدم VACUUM ANALYZE بعد الاستيراد</li>
+                <li><strong>التوثيق:</strong> وثق مصدر البيانات وتاريخ الاستيراد</li>
+            </ul>
+
+            <div class="code-block">
+                <div class="code-title">التحسين بعد الاستيراد</div>
+                <pre><code>-- تحديث الإحصائيات
+VACUUM ANALYZE cities;
+
+-- إعادة بناء الفهارس
+REINDEX TABLE cities;
+
+-- التحقق من حجم الجدول
+SELECT 
+    pg_size_pretty(pg_total_relation_size('cities')) AS total_size,
+    pg_size_pretty(pg_relation_size('cities')) AS table_size,
+    pg_size_pretty(pg_indexes_size('cities')) AS indexes_size;</code></pre>
+            </div>
+
+            <h2>الخلاصة</h2>
+            <p>في هذه المحاضرة تعلمنا:</p>
+            <ul>
+                <li>أدوات استيراد البيانات الجغرافية (shp2pgsql, ogr2ogr)</li>
+                <li>استيراد Shapefile</li>
+                <li>استيراد GeoJSON و KML</li>
+                <li>استيراد CSV وتحويله إلى بيانات جغرافية</li>
+                <li>استيراد البيانات النقطية</li>
+                <li>التحقق من البيانات المستوردة</li>
+                <li>إصلاح البيانات غير الصالحة</li>
+                <li>أفضل الممارسات</li>
+            </ul>
+
+            <div class="alert alert-success">
+                <strong>تهانينا!</strong> لقد أكملت المستوى المبتدئ. 
+                في المستوى المتوسط سنتعلم الاستعلامات الجغرافية المتقدمة والفهارس المكانية.
+            </div>
+        </div>
+
+        <div class="navigation">
+            <a href="06-spatial-data-types.html" class="nav-link prev">← المحاضرة السابقة: أنواع البيانات الجغرافية</a>
+            <a href="../../index.html" class="nav-link next">العودة إلى الفهرس →</a>
+        </div>
+    </main>
+
+    <footer class="main-footer">
+        <div class="container">
+            <p>&copy; 2024 دورة PostgreSQL و PostGIS - م. ياسر المفعلاني</p>
+        </div>
+    </footer>
+
+    <script src="../../scripts/main.js"></script>
+</body>
+</html>
+

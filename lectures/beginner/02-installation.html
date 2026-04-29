@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>المحاضرة 02: تثبيت وإعداد PostgreSQL - دورة PostgreSQL و PostGIS</title>
+    <link rel="stylesheet" href="../../styles/main.css">
+</head>
+<body>
+    <header class="main-header">
+        <div class="container">
+            <h1>دورة PostgreSQL و PostGIS الشاملة</h1>
+            <p class="instructor">مقدم الدورة: <strong>م. ياسر المفعلاني</strong></p>
+        </div>
+    </header>
+
+    <main class="lecture-content">
+        <div class="lecture-header">
+            <h1>المحاضرة 02: تثبيت وإعداد PostgreSQL</h1>
+            <div class="lecture-meta">
+                <span>المستوى: المبتدئ</span>
+                <span>المدة: 60 دقيقة</span>
+            </div>
+        </div>
+
+        <div class="lecture-body">
+            <a href="../../index.html" class="back-to-index">← العودة إلى الفهرس</a>
+
+            <h2>متطلبات النظام</h2>
+            <p>قبل تثبيت PostgreSQL، تأكد من أن نظامك يلبي المتطلبات التالية:</p>
+            <ul>
+                <li><strong>الذاكرة:</strong> 512 MB على الأقل (2 GB موصى به)</li>
+                <li><strong>مساحة القرص:</strong> 1 GB على الأقل للتثبيت الأساسي</li>
+                <li><strong>نظام التشغيل:</strong> Windows, Linux, أو macOS</li>
+            </ul>
+
+            <h2>التثبيت على Windows</h2>
+            <h3>الطريقة 1: استخدام المثبت الرسمي</h3>
+            <ol>
+                <li>قم بتحميل PostgreSQL من الموقع الرسمي: <a href="https://www.postgresql.org/download/windows/" target="_blank">postgresql.org</a></li>
+                <li>شغّل ملف التثبيت (.exe)</li>
+                <li>اتبع معالج التثبيت:
+                    <ul>
+                        <li>اختر مجلد التثبيت (الافتراضي: C:\Program Files\PostgreSQL)</li>
+                        <li>اختر المكونات: PostgreSQL Server, pgAdmin, Command Line Tools</li>
+                        <li>حدد مجلد البيانات</li>
+                        <li>أدخل كلمة مرور المستخدم <code>postgres</code></li>
+                        <li>اختر المنفذ (الافتراضي: 5432)</li>
+                    </ul>
+                </li>
+                <li>أكمل التثبيت وانتظر حتى ينتهي</li>
+            </ol>
+
+            <div class="code-block">
+                <div class="code-title">التحقق من التثبيت</div>
+                <pre><code>-- فتح PowerShell أو Command Prompt
+psql --version
+
+-- يجب أن ترى رقم الإصدار، مثلاً:
+-- psql (PostgreSQL) 16.0</code></pre>
+            </div>
+
+            <h3>الطريقة 2: استخدام Chocolatey</h3>
+            <div class="code-block">
+                <div class="code-title">تثبيت باستخدام Chocolatey</div>
+                <pre><code># تثبيت Chocolatey أولاً (إذا لم يكن مثبتاً)
+# ثم قم بتشغيل:
+choco install postgresql
+
+# أو مع PostGIS:
+choco install postgresql --params '/Password:YourPassword'</code></pre>
+            </div>
+
+            <h2>التثبيت على Linux</h2>
+            <h3>Ubuntu/Debian</h3>
+            <div class="code-block">
+                <div class="code-title">تثبيت PostgreSQL على Ubuntu</div>
+                <pre><code># تحديث قائمة الحزم
+sudo apt update
+
+# تثبيت PostgreSQL
+sudo apt install postgresql postgresql-contrib
+
+# تثبيت PostGIS
+sudo apt install postgis postgresql-16-postgis-3
+
+# بدء الخدمة
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
+
+# التحقق من الحالة
+sudo systemctl status postgresql</code></pre>
+            </div>
+
+            <h3>CentOS/RHEL</h3>
+            <div class="code-block">
+                <div class="code-title">تثبيت PostgreSQL على CentOS</div>
+                <pre><code># تثبيت مستودع PostgreSQL الرسمي
+sudo yum install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-7-x86_64/pgdg-redhat-repo-latest.noarch.rpm
+
+# تثبيت PostgreSQL
+sudo yum install -y postgresql16-server postgresql16
+
+# تهيئة قاعدة البيانات
+sudo /usr/pgsql-16/bin/postgresql-16-setup initdb
+
+# بدء الخدمة
+sudo systemctl start postgresql-16
+sudo systemctl enable postgresql-16</code></pre>
+            </div>
+
+            <h2>التثبيت على macOS</h2>
+            <h3>استخدام Homebrew</h3>
+            <div class="code-block">
+                <div class="code-title">تثبيت PostgreSQL على macOS</div>
+                <pre><code># تثبيت Homebrew (إذا لم يكن مثبتاً)
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# تثبيت PostgreSQL
+brew install postgresql@16
+
+# تثبيت PostGIS
+brew install postgis
+
+# بدء الخدمة
+brew services start postgresql@16</code></pre>
+            </div>
+
+            <h2>الإعداد الأولي</h2>
+            <h3>1. إنشاء قاعدة بيانات أولية</h3>
+            <div class="code-block">
+                <div class="code-title">إنشاء قاعدة بيانات</div>
+                <pre><code># تسجيل الدخول كمستخدم postgres
+sudo -u postgres psql
+
+# أو على Windows (بعد إضافة PostgreSQL إلى PATH)
+psql -U postgres
+
+# إنشاء قاعدة بيانات جديدة
+CREATE DATABASE mydb;
+
+# إنشاء مستخدم جديد
+CREATE USER myuser WITH PASSWORD 'mypassword';
+
+# منح الصلاحيات
+GRANT ALL PRIVILEGES ON DATABASE mydb TO myuser;
+
+# الخروج
+\q</code></pre>
+            </div>
+
+            <h3>2. تثبيت PostGIS</h3>
+            <div class="code-block">
+                <div class="code-title">تفعيل PostGIS في قاعدة البيانات</div>
+                <pre><code># الاتصال بقاعدة البيانات
+psql -U postgres -d mydb
+
+# تثبيت PostGIS
+CREATE EXTENSION postgis;
+
+# التحقق من التثبيت
+SELECT PostGIS_Version();
+
+# يجب أن ترى رقم الإصدار، مثلاً:
+-- POSTGIS="3.4.0" [EXTENSION] PGSQL="160" GEOS="3.12.0" PROJ="9.3.0"</code></pre>
+            </div>
+
+            <h3>3. إعداد ملف التكوين</h3>
+            <p>ملف <code>postgresql.conf</code> يحتوي على إعدادات الخادم:</p>
+            <div class="code-block">
+                <div class="code-title">تعديل إعدادات PostgreSQL</div>
+                <pre><code># موقع الملف:
+# Windows: C:\Program Files\PostgreSQL\16\data\postgresql.conf
+# Linux: /etc/postgresql/16/main/postgresql.conf
+# macOS: /usr/local/var/postgres/postgresql.conf
+
+# إعدادات مهمة:
+listen_addresses = '*'          # السماح بالاتصالات من أي عنوان
+port = 5432                      # منفذ الاتصال
+max_connections = 100            # الحد الأقصى للاتصالات
+shared_buffers = 256MB           # الذاكرة المشتركة
+effective_cache_size = 1GB       # حجم الذاكرة المؤقتة</code></pre>
+            </div>
+
+            <h3>4. إعداد ملف pg_hba.conf</h3>
+            <p>هذا الملف يتحكم في المصادقة والاتصالات:</p>
+            <div class="code-block">
+                <div class="code-title">إعدادات المصادقة</div>
+                <pre><code># موقع الملف:
+# Windows: C:\Program Files\PostgreSQL\16\data\pg_hba.conf
+# Linux: /etc/postgresql/16/main/pg_hba.conf
+
+# مثال على الإعدادات:
+# TYPE  DATABASE  USER  ADDRESS  METHOD
+host    all       all   0.0.0.0/0  md5
+local   all       all              peer</code></pre>
+            </div>
+
+            <div class="alert alert-warning">
+                <strong>تحذير:</strong> بعد تعديل ملفات التكوين، يجب إعادة تشغيل خدمة PostgreSQL 
+                لتطبيق التغييرات.
+            </div>
+
+            <h2>أدوات إدارة PostgreSQL</h2>
+            <h3>1. psql (سطر الأوامر)</h3>
+            <div class="code-block">
+                <div class="code-title">أوامر psql الأساسية</div>
+                <pre><code># الاتصال بقاعدة البيانات
+psql -U username -d database_name -h localhost
+
+# الأوامر الداخلية لـ psql:
+\l          # عرض قائمة قواعد البيانات
+\c dbname   # الاتصال بقاعدة بيانات
+\dt         # عرض الجداول
+\d table    # وصف جدول
+\q          # الخروج
+\?          # مساعدة</code></pre>
+            </div>
+
+            <h3>2. pgAdmin (واجهة رسومية)</h3>
+            <p>
+                pgAdmin هو أداة إدارة رسومية قوية لـ PostgreSQL. يتم تثبيتها تلقائيًا مع 
+                PostgreSQL على Windows، ويمكن تثبيتها بشكل منفصل على أنظمة أخرى.
+            </p>
+            <ul>
+                <li>إدارة قواعد البيانات والجداول</li>
+                <li>تنفيذ الاستعلامات SQL</li>
+                <li>عرض البيانات والنتائج</li>
+                <li>إدارة المستخدمين والصلاحيات</li>
+                <li>النسخ الاحتياطي والاستعادة</li>
+            </ul>
+
+            <h2>التحقق من التثبيت</h2>
+            <div class="code-block">
+                <div class="code-title">اختبار التثبيت</div>
+                <pre><code># 1. التحقق من إصدار PostgreSQL
+psql --version
+
+# 2. التحقق من حالة الخدمة
+# Windows:
+Get-Service postgresql*
+
+# Linux:
+sudo systemctl status postgresql
+
+# macOS:
+brew services list
+
+# 3. الاتصال بقاعدة البيانات
+psql -U postgres
+
+# 4. التحقق من PostGIS
+SELECT PostGIS_Version();
+SELECT PostGIS_Full_Version();</code></pre>
+            </div>
+
+            <h2>حل المشاكل الشائعة</h2>
+            <div class="alert alert-danger">
+                <strong>مشكلة:</strong> خطأ "connection refused"
+            </div>
+            <p><strong>الحل:</strong></p>
+            <ul>
+                <li>تأكد من أن خدمة PostgreSQL تعمل</li>
+                <li>تحقق من إعدادات <code>postgresql.conf</code> و <code>pg_hba.conf</code></li>
+                <li>تأكد من أن المنفذ 5432 مفتوح</li>
+            </ul>
+
+            <div class="alert alert-danger">
+                <strong>مشكلة:</strong> خطأ "password authentication failed"
+            </div>
+            <p><strong>الحل:</strong></p>
+            <ul>
+                <li>تأكد من كلمة المرور الصحيحة</li>
+                <li>تحقق من إعدادات المصادقة في <code>pg_hba.conf</code></li>
+            </ul>
+
+            <h2>الخلاصة</h2>
+            <p>في هذه المحاضرة تعلمنا:</p>
+            <ul>
+                <li>كيفية تثبيت PostgreSQL على أنظمة التشغيل المختلفة</li>
+                <li>كيفية تثبيت PostGIS</li>
+                <li>الإعداد الأولي لقاعدة البيانات</li>
+                <li>استخدام أدوات الإدارة (psql و pgAdmin)</li>
+                <li>حل المشاكل الشائعة</li>
+            </ul>
+
+            <p>في المحاضرة القادمة سنتعلم أساسيات SQL للعمل مع PostgreSQL.</p>
+        </div>
+
+        <div class="navigation">
+            <a href="01-introduction.html" class="nav-link prev">← المحاضرة السابقة: مقدمة في PostgreSQL</a>
+            <a href="03-basic-sql.html" class="nav-link next">المحاضرة التالية: أساسيات SQL →</a>
+        </div>
+    </main>
+
+    <footer class="main-footer">
+        <div class="container">
+            <p>&copy; 2024 دورة PostgreSQL و PostGIS - م. ياسر المفعلاني</p>
+        </div>
+    </footer>
+
+    <script src="../../scripts/main.js"></script>
+</body>
+</html>
+
